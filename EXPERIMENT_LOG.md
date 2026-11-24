@@ -95,3 +95,19 @@
 - **Why A works:** AUC stays ≥ 0.987 at every bitrate → ranking survives; only the score offset drifts, which a 2-parameter calibrator per bitrate removes.
 - **Caveat:** A relies on the user's bitrate choice being roughly right; a wrong choice is untested → next: EXP-004e (mismatched dropdown).
 - **Decision:** adopt A (bitrate-aware calibration) as the deployment design.
+
+## EXP-005 · 2026-11-24 · Challengers vs EXP-004d winner (A), n = 1,000 — **F (RawBoost-aug + per-bitrate cal) BEST**
+- **Goal:** check whether A can be beaten before adopting it. Same 1,000 test files, 9 conditions, frozen WavLM-B+ layer-avg.
+- **Variants (all with per-bitrate calibration except U):** A = 32k linear probe (reference) · D = mixed-bitrate (clean/64/32/16k) probe · E = 1-hidden-layer MLP (256) · F = 32k probe trained on originals + RawBoost-style copies (random band-pass coloration + 10–35 dB noise) · U = "Not sure" mode (D probe, one pooled calibrator).
+- **Observed (accuracy %, 95% CI):**
+  | cond | A | D | E | **F** | U |
+  |---|---|---|---|---|---|
+  | clean | 97.9 | 98.0 | 96.3 | **98.9** | 96.5 |
+  | 64k / 2×64k | 98.4 / 97.9 | 97.9 / 97.9 | 97.2 / 96.2 | **98.9 / 99.1** | 96.2 / 96.8 |
+  | 32k / 2×32k | 98.1 / 97.8 | 97.8 / 97.5 | 96.8 / 96.2 | **98.9 / 98.4** | 97.3 / 97.0 |
+  | 16k / 2×16k | 97.1 / 96.7 | 97.1 / 96.4 | 96.2 / 95.2 | **98.5 [97.7–99.2] / 98.3 [97.5–99.1]** | 95.4 / 95.8 |
+  | 8k / 2×8k | 94.2 / 93.8 | 94.7 / 93.7 | 94.2 / 93.2 | 94.7 / 93.9 | 77.9 / 77.0 |
+  | avg / worst | 96.9 / 93.8 | 96.8 / 93.7 | 95.7 / 93.2 | **97.7 / 93.9** | 92.2 / 77.0 |
+- **Findings:** F beats A in all 9 conditions (+0.1 to +1.6 pts; largest at 16k). D ≈ A (mixed-bitrate training adds nothing once calibration is per-bitrate). E (MLP) is worse than linear → no benefit from a non-linear head on 600 training files. U ("Not sure") holds ≥ 95% down to 16k but drops to ~77% at 8k.
+- **Caveat:** individual CIs overlap slightly at 16k; the case for F rests on consistent wins across all conditions. Paired significance test to be added.
+- **Decision:** deployment design = **F** (RawBoost-augmented WavLM probe + per-bitrate calibration chosen by the dropdown); "Not sure" uses U and should warn the user when the audio looks like ≤ 8 kbps.

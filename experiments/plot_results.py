@@ -9,6 +9,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 
 C = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]  # fixed categorical order
 INK, INK2, GRID, BG = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
@@ -192,10 +193,10 @@ def double_comp(rows, out):
     single_vs_double("auc", "ROC-AUC", "EXP-004c: ranking ability, single vs re-compressed", "4_auc.png")
 
 
-def exp004d(rows, out):
-    V = ["BASE", "A", "B", "C"]
-    VN = {"BASE": "BASE (EXP-004c)", "A": "A: per-bitrate calibration", "B": "B: mixed-bitrate probe",
-          "C": "C: + 4 kHz low-pass branch"}
+def exp004d(rows, out, V=None, VN=None, tag="EXP-004d"):
+    V = V or ["BASE", "A", "B", "C"]
+    VN = VN or {"BASE": "BASE (EXP-004c)", "A": "A: per-bitrate calibration", "B": "B: mixed-bitrate probe",
+                "C": "C: + 4 kHz low-pass branch"}
     S = {(r["variant"], r["condition"]): r for r in rows}
     brs = ["64k", "32k", "16k", "8k"]
     for k, (mode, ttl) in enumerate([("single", "single compression"), ("double", "re-compressed (64k → X)")], 1):
@@ -207,7 +208,7 @@ def exp004d(rows, out):
             ax.errorbar(brs, ys, yerr=[lo, hi], color=C[j], lw=2, marker="o", ms=5, capsize=3, label=VN[v])
         ax.axhline(95, color=INK2, ls="--", lw=1); ax.text(3, 95.6, "target 95%", ha="right", fontsize=8, color=INK2)
         ax.set_ylim(45, 101); ax.set_ylabel("Accuracy (%) with 95% CI"); ax.set_xlabel("Final MP3 bitrate")
-        ax.set_title(f"EXP-004d: accuracy vs bitrate, {ttl} (n=1,000)"); ax.legend(fontsize=8, loc="lower left")
+        ax.set_title(f"{tag}: accuracy vs bitrate, {ttl} (n=1,000)"); ax.legend(fontsize=8, loc="lower left")
         save(fig, out, f"{k}_accuracy_{mode}.png")
     fig, ax = plt.subplots(figsize=(8, 4))
     cs = ["single_16k", "double_16k"]
@@ -220,7 +221,7 @@ def exp004d(rows, out):
         ax.bar_label(b, [f"{y:.1f}" for y in ys], fontsize=8, color=INK2, padding=8)
     ax.axhline(95, color=INK2, ls="--", lw=1)
     ax.set_xticks(range(len(cs)), ["16 kbps (single)", "16 kbps (re-compressed)"]); ax.set_ylim(85, 100)
-    ax.set_ylabel("Accuracy (%) with 95% CI"); ax.set_title("EXP-004d: the 16 kbps target (≥ 95%)")
+    ax.set_ylabel("Accuracy (%) with 95% CI"); ax.set_title(f"{tag}: the 16 kbps target (≥ 95%)")
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=8)
     save(fig, out, "3_target_16k.png")
     conds = ["clean"] + [f"single_{b}" for b in brs] + [f"double_{b}" for b in brs]
@@ -232,7 +233,7 @@ def exp004d(rows, out):
     for a, t in [(a1, "False alarms: real voices called AI (%)"), (a2, "Misses: AI voices called real (%)")]:
         a.set_xticks(range(len(conds)), lbl); a.set_title(t, fontsize=10); a.set_xlabel("Condition (2× = re-compressed)")
     a1.set_yscale("symlog", linthresh=5); a2.legend(fontsize=8)
-    fig.suptitle("EXP-004d: where the errors come from", fontsize=11, y=1.02)
+    fig.suptitle(f"{tag}: where the errors come from", fontsize=11, y=1.02)
     save(fig, out, "4_error_breakdown.png")
 
 
@@ -258,6 +259,28 @@ def main():
         double_comp(json.load(open(R / "double_compression.json")), O / "EXP-004c_recompression")
     if (R / "exp004d.json").exists():
         exp004d(json.load(open(R / "exp004d.json")), O / "EXP-004d_tweaks")
+    if (R / "exp005.json").exists():
+        rows = json.load(open(R / "exp005.json"))
+        V5 = ["A", "D", "E", "F", "U"]
+        VN5 = {"A": "A: 32k probe + per-bitrate cal (4d winner)", "D": "D: mixed-bitrate probe + per-bitrate cal",
+               "E": "E: MLP + per-bitrate cal", "F": "F: RawBoost-aug probe + per-bitrate cal",
+               "U": "U: 'Not sure' mode (one calibrator)"}
+        o5 = O / "EXP-005_challengers"
+        exp004d(rows, o5, V5, VN5, "EXP-005")
+        S = {(r["variant"], r["condition"]): r for r in rows}
+        conds = ["clean"] + [f"{m}_{b}" for m in ("single", "double") for b in ("64k", "32k", "16k", "8k")]
+        fig, ax = plt.subplots(figsize=(8, 4))
+        avg = [np.mean([S[v, c]["acc"] for c in conds]) * 100 for v in V5]
+        worst = [min(S[v, c]["acc"] for c in conds) * 100 for v in V5]
+        x = np.arange(len(V5))
+        b1 = ax.bar(x - 0.2, avg, 0.38, color=C[0], label="Average over 9 conditions")
+        b2 = ax.bar(x + 0.2, worst, 0.38, color=C[1], label="Worst condition")
+        ax.bar_label(b1, [f"{v:.1f}" for v in avg], fontsize=8, color=INK2)
+        ax.bar_label(b2, [f"{v:.1f}" for v in worst], fontsize=8, color=INK2)
+        ax.set_xticks(x, V5); ax.set_ylim(40, 101); ax.set_ylabel("Accuracy (%)")
+        ax.set_title("EXP-005: overall ranking of methods (higher is better)")
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=8)
+        save(fig, o5, "5_overall_ranking.png")
     print("plots written to", O)
 
 
