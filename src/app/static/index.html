@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CompressedAudioForensics — Voice Authenticity Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* three shades: ink, slate, steel */
+    --ink:#0a0e15; --slate:#17202e; --steel:#a9bbd6;
+    --ink-2:#0e131c; --slate-2:#1f2a3b; --line:rgba(169,187,214,.12); --line-2:rgba(169,187,214,.22);
+    --text:#e8edf5; --muted:#8793a6; --faint:#5a6578;
+    --r:18px; --ease:cubic-bezier(.2,.8,.2,1);
+    --sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:"Geist Mono",ui-monospace,"SF Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{color-scheme:dark}
+  body{font-family:var(--sans);color:var(--text);min-height:100vh;
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(169,187,214,.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(169,187,214,.06), transparent 60%),
+      linear-gradient(180deg,var(--ink) 0%, var(--ink-2) 100%);
+    -webkit-font-smoothing:antialiased;letter-spacing:-.005em}
+  .wrap{max-width:1080px;margin:0 auto;padding:56px 24px 80px}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:40px;flex-wrap:wrap}
+  .brand{display:flex;gap:14px;align-items:center}
+  .mark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;
+    background:linear-gradient(145deg,var(--slate-2),var(--ink-2));border:1px solid var(--line-2);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+  h1{font-size:22px;font-weight:600;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:13.5px;margin-top:3px}
+  .pill{font-family:var(--mono);font-size:11.5px;color:var(--steel);border:1px solid var(--line-2);
+    padding:6px 10px;border-radius:999px;background:rgba(169,187,214,.05);display:flex;gap:8px;align-items:center}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);transition:background .4s}
+  .dot.on{background:var(--steel);box-shadow:0 0 10px rgba(169,187,214,.7)}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media (max-width:860px){.grid{grid-template-columns:1fr}}
+  .card{position:relative;border-radius:var(--r);padding:24px;
+    background:linear-gradient(160deg,rgba(31,42,59,.72),rgba(23,32,46,.55));
+    border:1px solid var(--line);box-shadow:0 1px 0 rgba(255,255,255,.03) inset,0 20px 40px -24px rgba(0,0,0,.6);
+    transition:transform .45s var(--ease),box-shadow .45s var(--ease),border-color .45s var(--ease);
+    backdrop-filter:blur(6px)}
+  #cardIn{z-index:5}#cardOut{z-index:2}#cardAn{z-index:1}
+  .card:hover{transform:translateY(-4px);border-color:var(--line-2);
+    box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 30px 60px -28px rgba(0,0,0,.75),0 0 0 1px rgba(169,187,214,.05)}
+  .card.pop{animation:pop .42s var(--ease)}
+  @keyframes pop{0%{transform:translateY(-4px) scale(1)}40%{transform:translateY(-4px) scale(.985)}100%{transform:translateY(-4px) scale(1)}}
+  .card h2{font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:18px;
+    display:flex;align-items:center;gap:10px}
+  .card h2 .n{font-family:var(--mono);color:var(--steel);font-size:11px;border:1px solid var(--line-2);border-radius:6px;padding:2px 6px;letter-spacing:0}
+  .span2{grid-column:1/-1}
+
+  /* drop zone */
+  .drop{border:1.5px dashed var(--line-2);border-radius:14px;padding:30px 18px;text-align:center;cursor:pointer;
+    transition:border-color .3s,background .3s,transform .3s var(--ease);background:rgba(10,14,21,.35)}
+  .drop:hover,.drop.over{border-color:var(--steel);background:rgba(169,187,214,.05)}
+  .drop strong{display:block;font-weight:500;font-size:15px;margin:10px 0 4px}
+  .drop span{color:var(--muted);font-size:12.5px}
+  .file{display:none;margin-top:14px;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;
+    background:rgba(10,14,21,.5);border:1px solid var(--line)}
+  .file.show{display:flex;animation:fade .35s var(--ease)}
+  .file .nm{font-size:13.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file .sz{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  audio{width:100%;margin-top:12px;height:34px;filter:invert(.9) hue-rotate(180deg) saturate(.4);opacity:.85;display:none}
+
+  /* select */
+  label.lbl{display:block;font-size:13px;color:var(--muted);margin:22px 0 10px}
+  .select{position:relative}
+  .sel-btn{width:100%;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;cursor:pointer;
+    background:rgba(10,14,21,.5);border:1px solid var(--line-2);color:var(--text);font:inherit;font-size:14px;text-align:left;
+    transition:border-color .3s,background .3s}
+  .sel-btn:hover{border-color:var(--steel)}
+  .chev{margin-left:auto;transition:transform .45s var(--ease);opacity:.7}
+  .select.open .chev{transform:rotate(180deg)}
+  .badge{width:28px;height:28px;flex:none;border-radius:8px;display:grid;place-items:center;font-size:11px;font-weight:600;
+    font-family:var(--mono);color:var(--ink);background:linear-gradient(145deg,#cbd7e8,var(--steel));letter-spacing:-.02em}
+  .badge.q{background:transparent;color:var(--steel);border:1px dashed var(--line-2)}
+  .menu{position:absolute;z-index:20;left:0;right:0;top:calc(100% + 8px);border-radius:14px;overflow:hidden;
+    background:linear-gradient(170deg,#1c2637,#141b27);border:1px solid var(--line-2);
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.8);
+    display:grid;grid-template-rows:0fr;opacity:0;transform:translateY(-6px);pointer-events:none;
+    transition:grid-template-rows .5s var(--ease),opacity .35s var(--ease),transform .5s var(--ease)}
+  .select.open .menu{grid-template-rows:1fr;opacity:1;transform:none;pointer-events:auto}
+  .menu>div{overflow:hidden}
+  .menu ul{list-style:none;max-height:320px;overflow-y:auto;padding:6px}
+  .menu li{display:flex;gap:12px;align-items:center;padding:9px 10px;border-radius:10px;cursor:pointer;transition:background .2s}
+  .menu li:hover,.menu li.act{background:rgba(169,187,214,.09)}
+  .menu li .t{font-size:13.5px}
+  .menu li .d{font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+  .menu ul::-webkit-scrollbar{width:6px}.menu ul::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:6px}
+  .hint{font-size:12px;color:var(--faint);margin-top:10px;line-height:1.5}
+
+  .btn{margin-top:24px;width:100%;padding:14px 18px;border-radius:12px;border:1px solid rgba(169,187,214,.35);
+    font:inherit;font-weight:600;font-size:14.5px;color:var(--ink);cursor:pointer;letter-spacing:-.01em;
+    background:linear-gradient(180deg,#d4deec,var(--steel));
+    transition:transform .3s var(--ease),box-shadow .3s var(--ease),opacity .3s;box-shadow:0 10px 30px -12px rgba(169,187,214,.45)}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 16px 36px -12px rgba(169,187,214,.55)}
+  .btn:active{transform:scale(.98)}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+
+  /* result */
+  .empty{color:var(--faint);font-size:14px;height:100%;min-height:300px;display:grid;place-items:center;text-align:center;line-height:1.6}
+  .res{display:none;animation:fade .5s var(--ease)}
+  .res.show{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .verdict{display:flex;gap:22px;align-items:center}
+  .ring{position:relative;width:132px;height:132px;flex:none}
+  .ring svg{transform:rotate(-90deg)}
+  .ring .val{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+  .ring .val b{font-size:30px;font-weight:600;letter-spacing:-.03em;display:block}
+  .ring .val small{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+  .vtxt .tag{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
+  .vtxt h3{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:6px 0 8px;line-height:1.2}
+  .vtxt p{font-size:13px;color:var(--muted);line-height:1.55}
+  .level-fake .vtxt h3{color:#f1f4f9;text-decoration:underline;text-decoration-color:var(--steel);text-underline-offset:6px;text-decoration-thickness:2px}
+  .kv{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:22px}
+  .kv div{padding:12px;border-radius:12px;background:rgba(10,14,21,.45);border:1px solid var(--line)}
+  .kv span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+  .kv b{display:block;font-family:var(--mono);font-weight:500;font-size:14px;margin-top:6px}
+  .why{margin-top:16px;font-size:12.5px;color:var(--muted);line-height:1.6;padding:12px 14px;border-left:2px solid var(--steel);
+    background:rgba(169,187,214,.04);border-radius:0 10px 10px 0}
+  .adv{margin-top:16px;display:grid;gap:8px}
+  .adv div{font-size:13px;display:flex;gap:10px;line-height:1.5}
+  .adv div::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--steel);margin-top:7px;flex:none}
+
+  /* analytics */
+  .acc-head{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+  .acc-head h2{margin:0}
+  .acc-head .chev{margin-left:0}
+  .acc.open .acc-head .chev{transform:rotate(180deg)}
+  .acc-body{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .7s var(--ease),opacity .5s var(--ease)}
+  .acc.open .acc-body{grid-template-rows:1fr;opacity:1}
+  .acc-body>div{overflow:hidden}
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding-top:22px}
+  @media (max-width:860px){.charts{grid-template-columns:1fr}}
+  .chart{padding:18px;border-radius:14px;background:rgba(10,14,21,.45);border:1px solid var(--line);transition:transform .4s var(--ease)}
+  .chart:hover{transform:translateY(-2px)}
+  .chart h4{font-size:14px;font-weight:600;letter-spacing:-.01em}
+  .chart .cap{font-size:12px;color:var(--muted);margin:4px 0 12px;line-height:1.5}
+  .chart svg{width:100%;height:auto;display:block}
+  .legend{display:flex;gap:16px;margin-top:10px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+  .legend i{display:inline-block;width:18px;height:0;border-top:2px solid var(--steel);vertical-align:middle;margin-right:6px}
+  .legend i.d{border-top-style:dashed;border-color:var(--muted)}
+  .legend i.b{height:10px;border:none;background:rgba(169,187,214,.12);width:12px}
+  .tip{position:fixed;pointer-events:none;z-index:50;font-family:var(--mono);font-size:11.5px;padding:7px 9px;border-radius:8px;
+    background:#0b0f16;border:1px solid var(--line-2);color:var(--text);opacity:0;transition:opacity .15s;white-space:nowrap}
+  .spin{width:16px;height:16px;border:2px solid rgba(10,14,21,.3);border-top-color:var(--ink);border-radius:50%;
+    display:inline-block;vertical-align:-3px;margin-right:8px;animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .err{color:#dfe6f1;font-size:13px;margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line-2);display:none}
+  footer{margin-top:36px;color:var(--faint);font-size:12px;line-height:1.6;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a9bbd6" stroke-width="1.8" stroke-linecap="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2M21 12h0"/></svg></div>
+      <div><h1>CompressedAudioForensics</h1><div class="sub">Detect AI-cloned voices in compressed, real-world audio</div></div>
+    </div>
+    <div class="pill"><span class="dot" id="dot"></span><span id="status">connecting…</span></div>
+  </header>
+
+  <div class="grid">
+    <!-- 1 upload + source -->
+    <section class="card" id="cardIn">
+      <h2><span class="n">01</span>Upload &amp; source</h2>
+      <div class="drop" id="drop">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#a9bbd6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        <strong>Drop an audio file or click to browse</strong>
+        <span>OGG / OPUS · MP3 · M4A / AAC · WAV · FLAC · WEBM — up to 10 minutes</span>
+        <input type="file" id="fileIn" accept="audio/*,.opus,.ogg,.m4a,.aac,.webm" hidden>
+      </div>
+      <div class="file" id="fileBox"><div class="badge q">♪</div><div class="nm" id="fname"></div><div class="sz" id="fsize"></div></div>
+      <audio id="player" controls></audio>
+
+      <label class="lbl">Where did you receive this audio?</label>
+      <div class="select" id="sel">
+        <button class="sel-btn" id="selBtn" type="button">
+          <span class="badge q" id="selBadge">?</span><span id="selName">I don't know</span>
+          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="menu"><div><ul id="menu"></ul></div></div>
+      </div>
+      <div class="hint" id="selHint">The app picks the matching compression profile. If the file header states its codec and bitrate, that is used instead.</div>
+
+      <button class="btn" id="go" disabled>Check authenticity</button>
+      <div class="err" id="err"></div>
+    </section>
+
+    <!-- 2 result -->
+    <section class="card" id="cardOut">
+      <h2><span class="n">02</span>Detection result</h2>
+      <div class="empty" id="empty">Upload a voice note and choose its source.<br>The verdict appears here.</div>
+      <div class="res" id="res">
+        <div class="verdict" id="vbox">
+          <div class="ring">
+            <svg width="132" height="132" viewBox="0 0 132 132">
+              <circle cx="66" cy="66" r="56" stroke="rgba(169,187,214,.12)" stroke-width="10" fill="none"/>
+              <circle id="arc" cx="66" cy="66" r="56" stroke="url(#g)" stroke-width="10" fill="none" stroke-linecap="round"
+                      stroke-dasharray="351.86" stroke-dashoffset="351.86" style="transition:stroke-dashoffset 1.2s cubic-bezier(.2,.8,.2,1)"/>
+              <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#6f84a3"/><stop offset="1" stop-color="#d4deec"/></linearGradient></defs>
+            </svg>
+            <div class="val"><div><b id="pct">–</b><small id="pctLbl">real</small></div></div>
+          </div>
+          <div class="vtxt"><div class="tag">Verdict</div><h3 id="verdict">–</h3><p id="vsub"></p></div>
+        </div>
+        <div class="kv">
+          <div><span>Decision margin</span><b id="kMargin">–</b></div>
+          <div><span>Profile used</span><b id="kCal">–</b></div>
+          <div><span>Analysed</span><b id="kDur">–</b></div>
+        </div>
+        <div class="why" id="why"></div>
+        <div class="adv" id="adv"></div>
+      </div>
+    </section>
+
+    <!-- 3 analytics -->
+    <section class="card span2 acc" id="cardAn">
+      <div class="acc-head" id="accHead">
+        <h2><span class="n">03</span>View analytics — how the decision was made</h2>
+        <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9bbd6" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="acc-body"><div>
+        <div class="charts">
+          <div class="chart">
+            <h4>Confidence over time</h4>
+            <div class="cap">The audio is checked in overlapping 4-second windows. Each point is how human that stretch sounds; low-energy (non-speech) windows are shaded and ignored.</div>
+            <div id="c1"></div>
+            <div class="legend"><span><i></i>P(human voice) per window</span><span><i class="d"></i>Decision line 50%</span><span><i class="b"></i>Low-speech window</span></div>
+          </div>
+          <div class="chart">
+            <h4>Where this file sits among known voices</h4>
+            <div class="cap">Score distributions of verified real and AI voices for the selected compression profile. The vertical marker is this file; the dashed line is the decision boundary.</div>
+            <div id="c2"></div>
+            <div class="legend"><span><i></i>Real voices (reference)</span><span><i class="d"></i>AI voices (reference)</span><span><i style="border-color:#e8edf5;border-top-width:3px"></i>This file</span></div>
+          </div>
+        </div>
+        <div class="hint" id="anHint" style="margin-top:16px"></div>
+      </div></div>
+    </section>
+  </div>
+
+  <footer>Research prototype · frozen WavLM-Base+ features, RawBoost-augmented probe, bitrate-aware calibration (method F) · audio is processed in memory and deleted immediately · results are probabilistic and are not legal evidence</footer>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const SOURCES = [
+  ["whatsapp","WhatsApp","WA"],["telegram","Telegram","TG"],["signal","Signal","SG"],["messenger","Facebook Messenger","FM"],
+  ["instagram","Instagram","IG"],["viber","Viber","VB"],["wechat","WeChat","WC"],["discord","Discord","DC"],
+  ["snapchat","Snapchat","SC"],["reddit","Reddit","RD"],["gmail","Gmail / e-mail","GM"],["phone","Phone call / voicemail","PH"],
+  ["other","Other messenger","OT"],["unknown","I don't know","?"]];
+let notes = {}, platform = "unknown", file = null;
+
+// status + platform notes
+fetch("/api/platforms").then(r=>r.json()).then(list=>{
+  list.forEach(p=>notes[p.id]=p); $("#dot").classList.add("on"); $("#status").textContent="model ready · local GPU";
+  buildMenu();
+}).catch(()=>{$("#status").textContent="backend offline"; buildMenu();});
+
+function buildMenu(){
+  $("#menu").innerHTML = SOURCES.map(([id,name,ab])=>`<li data-id="${id}" class="${id===platform?'act':''}">
+    <span class="badge ${id==='unknown'?'q':''}">${ab}</span><div><div class="t">${name}</div>
+    <div class="d">${notes[id]?notes[id].note:''}</div></div></li>`).join("");
+  $("#menu").querySelectorAll("li").forEach(li=>li.onclick=e=>{e.stopPropagation(); pick(li.dataset.id);});
+}
+function pick(id){
+  platform=id; const s=SOURCES.find(x=>x[0]===id);
+  $("#selName").textContent=s[1]; $("#selBadge").textContent=s[2]; $("#selBadge").className="badge"+(id==="unknown"?" q":"");
+  $("#selHint").textContent = notes[id] ? `${notes[id].note}. A codec/bitrate stated in the file header overrides this.` : "";
+  $("#sel").classList.remove("open"); buildMenu();
+}
+$("#selBtn").onclick=e=>{e.stopPropagation(); $("#sel").classList.toggle("open");};
+document.addEventListener("click",()=>$("#sel").classList.remove("open"));
+
+// pop animation on card click
+document.querySelectorAll(".card").forEach(c=>c.addEventListener("mousedown",()=>{c.classList.remove("pop");void c.offsetWidth;c.classList.add("pop");}));
+
+// upload
+const drop=$("#drop"), fin=$("#fileIn");
+drop.onclick=()=>fin.click();
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop",e=>{if(e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);});
+fin.onchange=()=>fin.files[0]&&setFile(fin.files[0]);
+function setFile(f){
+  file=f; $("#fname").textContent=f.name; $("#fsize").textContent=(f.size/1024/1024).toFixed(2)+" MB";
+  $("#fileBox").classList.add("show"); const p=$("#player"); p.src=URL.createObjectURL(f); p.style.display="block";
+  $("#go").disabled=false; $("#err").style.display="none";
+}
+
+// analyse
+$("#go").onclick=async()=>{
+  if(!file) return; const b=$("#go"); b.disabled=true; b.innerHTML='<span class="spin"></span>Analysing…';
+  $("#err").style.display="none";
+  const fd=new FormData(); fd.append("file",file); fd.append("platform",platform);
+  try{
+    const r=await fetch("/api/analyze",{method:"POST",body:fd});
+    const j=await r.json(); if(!r.ok) throw new Error(j.detail||"Analysis failed");
+    show(j);
+  }catch(e){ $("#err").textContent=e.message; $("#err").style.display="block"; }
+  b.disabled=false; b.textContent="Check authenticity";
+};
+
+function fmtCal(c){return c==="unknown"?"general":c==="clean"?"uncompressed":c+"bps";}
+function show(j){
+  $("#empty").style.display="none"; const res=$("#res"); res.classList.remove("show"); void res.offsetWidth; res.classList.add("show");
+  $("#vbox").parentElement.className="res show level-"+j.level;
+  const real=j.p_real>=.5, v=real?j.p_real:j.p_fake;
+  $("#pct").textContent=Math.round(v*100)+"%"; $("#pctLbl").textContent=real?"human":"AI-generated";
+  $("#arc").style.strokeDashoffset=351.86*(1-v);
+  $("#verdict").textContent=j.verdict;
+  $("#vsub").textContent = j.suspicious_span
+     ? `Mostly human-sounding, but ${j.suspicious_span[0]}–${j.suspicious_span[1]} s scores strongly as AI-generated.`
+     : `Source: ${j.platform}. ${j.windows.length} window${j.windows.length>1?"s":""} analysed.`;
+  $("#kMargin").textContent=j.margin.toFixed(2);
+  $("#kCal").textContent=fmtCal(j.calibration);
+  $("#kDur").textContent=j.file.decoded_seconds+" s";
+  const codec = j.file.codec ? `${j.file.codec.toUpperCase()}${j.file.bitrate_kbps?" · "+j.file.bitrate_kbps+" kbps":""}` : "unknown";
+  $("#why").innerHTML=`<b style="color:var(--text);font-weight:500">Compression profile:</b> ${j.calibration_reason}.<br>File: ${codec}${j.file.sample_rate?" · "+j.file.sample_rate+" Hz":""}.`
+     + (j.notes.length?"<br>"+j.notes.join("<br>"):"");
+  $("#adv").innerHTML=j.advice.map(a=>`<div>${a}</div>`).join("");
+  chartTimeline(j); chartDist(j);
+  $("#anHint").textContent=`Model ${j.model}. Final score = median over speech windows (${j.windows.filter(w=>w.speech).length} of ${j.windows.length}).`;
+  $("#cardAn").classList.add("open");
+  setTimeout(()=>$("#cardAn").scrollIntoView({behavior:"smooth",block:"start"}),650);
+}
+
+// analytics accordion
+$("#accHead").onclick=()=>$("#cardAn").classList.toggle("open");
+
+// charts (hand-drawn SVG)
+const W=520,H=230,P={l:42,r:14,t:14,b:34};
+const tip=$("#tip");
+function axes(xs,ys,xl,yl,xfmt,yfmt){
+  const g=[];
+  ys.forEach(v=>{const y=sy(v);g.push(`<line x1="${P.l}" x2="${W-P.r}" y1="${y}" y2="${y}" stroke="rgba(169,187,214,.08)"/>
+    <text x="${P.l-8}" y="${y+4}" text-anchor="end" font-size="10" fill="#5a6578" font-family="Geist Mono">${yfmt(v)}</text>`);});
+  xs.forEach(v=>g.push(`<text x="${sx(v)}" y="${H-P.b+16}" text-anchor="middle" font-size="10" fill="#5a6578" font-family="Geist Mono">${xfmt(v)}</text>`));
+  g.push(`<text x="${(P.l+W-P.r)/2}" y="${H-4}" text-anchor="middle" font-size="10.5" fill="#8793a6">${xl}</text>`);
+  return g.join("");
+}
+let sx,sy;
+function chartTimeline(j){
+  const ws=j.windows, T=Math.max(...ws.map(w=>w.t1));
+  const mid=w=>(w.t0+w.t1)/2;
+  sx=v=>P.l+(v/T)*(W-P.l-P.r); sy=v=>P.t+(1-v)*(H-P.t-P.b);
+  const pts=ws.map(w=>[sx(mid(w)),sy(w.p_real)]);
+  const line=pts.length>1?pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+","+p[1].toFixed(1)).join(""):`M${P.l},${pts[0][1]}L${W-P.r},${pts[0][1]}`;
+  const area=line+`L${pts.length>1?pts[pts.length-1][0]:W-P.r},${sy(0)}L${pts.length>1?pts[0][0]:P.l},${sy(0)}Z`;
+  const shade=ws.filter(w=>!w.speech).map(w=>`<rect x="${sx(w.t0)}" y="${P.t}" width="${sx(w.t1)-sx(w.t0)}" height="${H-P.t-P.b}" fill="rgba(169,187,214,.06)"/>`).join("");
+  const span=j.suspicious_span?`<rect x="${sx(j.suspicious_span[0])}" y="${P.t}" width="${sx(j.suspicious_span[1])-sx(j.suspicious_span[0])}" height="${H-P.t-P.b}" fill="none" stroke="#a9bbd6" stroke-dasharray="3 3" rx="4"/>`:"";
+  const xt=[0,T/4,T/2,3*T/4,T];
+  $("#c1").innerHTML=`<svg viewBox="0 0 ${W} ${H}">
+    <defs><linearGradient id="ga" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#a9bbd6" stop-opacity=".28"/><stop offset="1" stop-color="#a9bbd6" stop-opacity="0"/></linearGradient></defs>
+    ${shade}${axes(xt,[0,.25,.5,.75,1],"time (s)","",v=>v.toFixed(1),v=>Math.round(v*100)+"%")}
+    <line x1="${P.l}" x2="${W-P.r}" y1="${sy(.5)}" y2="${sy(.5)}" stroke="#8793a6" stroke-dasharray="5 5"/>
+    ${span}<path d="${area}" fill="url(#ga)"/><path class="draw" d="${line}" fill="none" stroke="#a9bbd6" stroke-width="2.2" stroke-linejoin="round"/>
+    ${pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="4.5" fill="#0e131c" stroke="#a9bbd6" stroke-width="2" data-t="${ws[i].t0}–${ws[i].t1} s · ${Math.round(ws[i].p_real*100)}% human${ws[i].speech?"":" · low speech"}"/>`).join("")}
+  </svg>`;
+  hookTips("#c1"); animatePath("#c1 .draw");
+}
+function chartDist(j){
+  const R=j.reference, g=R.grid, mx=Math.max(...R.real,...R.fake);
+  sx=v=>P.l+((v-g[0])/(g[g.length-1]-g[0]))*(W-P.l-P.r); sy=v=>P.t+(1-v/mx)*(H-P.t-P.b);
+  const path=arr=>arr.map((d,i)=>(i?"L":"M")+sx(g[i]).toFixed(1)+","+sy(d).toFixed(1)).join("");
+  const xt=[0,.25,.5,.75,1].map(f=>g[0]+f*(g[g.length-1]-g[0]));
+  const fx=sx(Math.min(Math.max(R.file_score,g[0]),g[g.length-1]));
+  $("#c2").innerHTML=`<svg viewBox="0 0 ${W} ${H}">
+    <defs><linearGradient id="gr" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#a9bbd6" stop-opacity=".3"/><stop offset="1" stop-color="#a9bbd6" stop-opacity="0"/></linearGradient></defs>
+    ${axes(xt,[0,mx/2,mx],"detector score  (← AI-like · human-like →)","",v=>v.toFixed(0),v=>"")}
+    <line x1="${sx(R.threshold)}" x2="${sx(R.threshold)}" y1="${P.t}" y2="${H-P.b}" stroke="#8793a6" stroke-dasharray="5 5"/>
+    <path d="${path(R.fake)}L${sx(g[g.length-1])},${sy(0)}L${sx(g[0])},${sy(0)}Z" fill="rgba(135,147,166,.10)"/>
+    <path class="draw" d="${path(R.fake)}" fill="none" stroke="#8793a6" stroke-width="2" stroke-dasharray="6 5"/>
+    <path d="${path(R.real)}L${sx(g[g.length-1])},${sy(0)}L${sx(g[0])},${sy(0)}Z" fill="url(#gr)"/>
+    <path class="draw" d="${path(R.real)}" fill="none" stroke="#a9bbd6" stroke-width="2.2"/>
+    <line x1="${fx}" x2="${fx}" y1="${P.t}" y2="${H-P.b}" stroke="#e8edf5" stroke-width="2.5"/>
+    <circle cx="${fx}" cy="${P.t+6}" r="5" fill="#e8edf5" data-t="this file · score ${R.file_score}"/>
+    <text x="${fx+8}" y="${P.t+10}" font-size="11" fill="#e8edf5" font-family="Geist">this file</text>
+  </svg>`;
+  hookTips("#c2"); animatePath("#c2 .draw");
+}
+function animatePath(sel){document.querySelectorAll(sel).forEach(p=>{const L=p.getTotalLength();if(p.getAttribute("stroke-dasharray"))return;
+  p.style.strokeDasharray=L;p.style.strokeDashoffset=L;p.getBoundingClientRect();p.style.transition="stroke-dashoffset 1.4s cubic-bezier(.2,.8,.2,1)";p.style.strokeDashoffset=0;});}
+function hookTips(sel){document.querySelectorAll(sel+" [data-t]").forEach(c=>{
+  c.style.cursor="pointer";
+  c.onmouseenter=e=>{tip.textContent=c.dataset.t;tip.style.opacity=1;};
+  c.onmousemove=e=>{tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY-30)+"px";};
+  c.onmouseleave=()=>tip.style.opacity=0;});}
+</script>
+</body>
+</html>
