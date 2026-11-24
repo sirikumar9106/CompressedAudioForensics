@@ -32,16 +32,25 @@ synthetic speech react differently to further degradation, even after heavy comp
 The output is a calibrated probability, a decision margin, and plain-language safety advice
 (“call back on a known number; don’t send money”).
 
-> Research status: hypothesis under evaluation. A pre-registered GO/NO-GO pilot gates full training.
+> Research status: the original Δ-Net hypothesis was rejected by its pre-registered pilot (kept as a documented
+> negative result). The project now builds on a WavLM front end; see Results.
 > Results are probabilistic and are not legal evidence.
 
 ## Results so far
+All tests use only the compressed file (no clean original), on attacks the detector never saw in training.
+Full details in [`EXPERIMENT_LOG.md`](EXPERIMENT_LOG.md); graphs in [`mapped_results/`](mapped_results/).
+
 | Exp | What was tested | Outcome |
 |---|---|---|
-| EXP-001 | Δz (μ-law differential) probe, seen attacks | NO-GO: Δz AUC 0.913 < plain embedding 0.971 |
+| EXP-001 | Δ-Net idea: compare file vs its own μ-law re-degraded copy (seen attacks) | NO-GO: Δz AUC 0.913 < plain embedding 0.971 |
 | EXP-002 | Same, on unseen attacks | NO-GO: Δz 0.947 < 0.979; partly a loudness cue |
+| EXP-003 | Official ASVspoof RawNet2 across MP3 320→8 kbps | Ranking holds (AUC 0.96→0.94) but default-threshold accuracy drops 90%→75% |
+| EXP-004 | Frozen **WavLM** front end vs official model (fair cross-attack test) | WavLM wins: EER ~1–2% vs 7–11% at every bitrate |
+| EXP-004b | Same files scored at every bitrate with ONE model (unknown-codec use) | Stable to 32 kbps; at 8–16 kbps WavLM flags most real voices as fake → needs bitrate-aware calibration |
+| EXP-004c | Re-compression (forwarded voice notes: 64 kbps → X) | Second encode costs ≤ 2.5 pts; the final bitrate decides behaviour |
 
-Full details: [`EXPERIMENT_LOG.md`](EXPERIMENT_LOG.md).
+**Current direction:** WavLM-based detector trained on mixed bitrates, with the user's bitrate selection
+choosing the calibration, plus an "uncertain" verdict when confidence is low.
 
 ## Pipeline
 ```
@@ -68,6 +77,11 @@ Datasets and pretrained weights are **not** included — see the bottom of `requ
 | 3 Static baseline B | `python experiments/run_training.py --model baseline_b --config config/baseline_rawnet2.yaml` |
 | 4 Δ-Net MVP | `python experiments/run_training.py --model deltanet --config config/delta_net_mvp.yaml` |
 | 5 Ablations | `... --model deltanet --set perturbation=gaussian` (etc.) |
+| EXP-003 | `python experiments/run_bitrate_sweep.py` |
+| EXP-004 | `python experiments/run_ssl_probe.py` |
+| EXP-004b | `python experiments/run_confidence_stability.py` |
+| EXP-004c | `python experiments/run_double_compression.py` |
+| Graphs | `python experiments/plot_results.py` → `mapped_results/` |
 
 ## Repository layout
 ```
@@ -78,7 +92,8 @@ src/training/  weighted CE, training loop
 src/evaluation EER / AUC / bootstrap CI (pure NumPy), Platt calibration
 src/app/       single-file inference engine (no clean reference allowed)
 src/utils/     locked-benchmark guard
-experiments/   phase scripts
+experiments/   phase + experiment scripts, plot_results.py
+mapped_results/ graphs per experiment (EXP-001 … EXP-004c)
 tests/         shape, weight-sharing, quantisation, metric and isolation tests
 ```
 
