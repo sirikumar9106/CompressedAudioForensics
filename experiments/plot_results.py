@@ -167,6 +167,31 @@ def stability(summ, rows, out):
     save(fig, out, "4_real_voice_confidence_spread.png")
 
 
+def double_comp(rows, out):
+    dets = list(dict.fromkeys(r["detector"] for r in rows))
+    brs = list(dict.fromkeys(r["bitrate"] for r in rows))
+    S = {(r["detector"], r["mode"], r["bitrate"]): r for r in rows}
+    def single_vs_double(key, ylab, title, name, scale=1, ref=None):
+        fig, axs = plt.subplots(1, len(dets), figsize=(13, 3.8), sharey=True)
+        for ax, d in zip(axs, dets):
+            for j, (m, lab) in enumerate([("single", "Single compression (X)"), ("double", "Re-compressed (64k → X)")]):
+                ax.plot(brs, [S[d, m, b][key] * scale for b in brs], color=C[j], lw=2, marker="o", ms=5, label=lab,
+                        ls="-" if m == "single" else "--")
+            if ref is not None:
+                ax.axhline(ref, color=INK2, ls=":", lw=1)
+            ax.set_title(d, fontsize=9); ax.set_xlabel("Final MP3 bitrate X")
+        axs[0].set_ylabel(ylab); axs[0].legend(fontsize=8)
+        fig.suptitle(title, fontsize=11, y=1.02)
+        save(fig, out, name)
+    single_vs_double("confidence_gap", "Mean P(real) on real − on fake",
+                     "EXP-004c: confidence gap between real and AI voices, single vs re-compressed", "1_confidence_gap.png")
+    single_vs_double("mean_p_real_on_real", "Mean P(real) on REAL voices",
+                     "EXP-004c: confidence on genuine voices (below 0.5 = false alarm)", "2_real_voice_confidence.png", ref=0.5)
+    single_vs_double("acc@0.5", "Accuracy at 0.5 (%)", "EXP-004c: accuracy, single vs re-compressed",
+                     "3_accuracy.png", scale=100, ref=50)
+    single_vs_double("auc", "ROC-AUC", "EXP-004c: ranking ability, single vs re-compressed", "4_auc.png")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
@@ -185,6 +210,8 @@ def main():
         import csv as _csv
         stability(json.load(open(R / "confidence_stability.json")),
                   list(_csv.DictReader(open(R / "confidence_stability.csv"))), O / "EXP-004b_confidence_stability")
+    if (R / "double_compression.json").exists():
+        double_comp(json.load(open(R / "double_compression.json")), O / "EXP-004c_recompression")
     print("plots written to", O)
 
 
