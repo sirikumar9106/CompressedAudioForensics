@@ -1,0 +1,20 @@
+# EXP-002 (exploratory): same protocol as pilot_config.yaml, but on ASVspoof 2019 LA EVAL attacks
+# never seen by Model A. A16/A19 excluded (same algorithms as seen A04/A06).
+seed: 42
+dev_manifest: data/manifests/asvspoof2019_eval.csv
+exclude_attacks: [A16, A19]
+result_name: phase2_pilot_unseen
+pretrained: models/pre_trained_DF_RawNet2.pth
+cache_root: data/cache
+codec: mp3
+bitrate: 32k
+perturbations: [mulaw8, gaussian]
+n_train: 150
+n_val: 50
+n_test: 100
+gate:
+  go_auc: 0.70
+  conditional_auc: 0.65
+  nogo_auc: 0.60
+  min_margin_over_noise: 0.08
+  max_confound_r: 0.20

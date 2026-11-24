@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 from src.data.manifests import build_manifest  # noqa: E402
 
 LA = ROOT / "data/raw/LA"
-SPLITS = {"train": "trn", "dev": "trl"}
+SPLITS = {"train": "trn", "dev": "trl", "eval": "trl"}  # 2019 eval = unseen attacks A07-A19 (NOT the locked 2021 set)
 
 
 def main():

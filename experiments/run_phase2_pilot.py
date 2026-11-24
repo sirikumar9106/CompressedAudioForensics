@@ -87,6 +87,8 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.manual_seed(cfg["seed"])
     rows = list(csv.DictReader(open(cfg["dev_manifest"], newline="")))
+    excl = set(cfg.get("exclude_attacks", []))
+    rows = [r for r in rows if r["attack"] not in excl]
     split = sample_split(rows, cfg, cfg["seed"])
     encoder = RawNet2Encoder(load_pretrained_rawnet2(cfg["pretrained"]), proj_dim=None).to(device).eval()
 
@@ -120,7 +122,7 @@ def main():
     else:
         verdict = "INCONCLUSIVE (0.60-0.65 or failed noise/confound check) - review with user"
     res["verdict"] = verdict
-    out = ROOT / "results/phase2_pilot.json"
+    out = ROOT / "results" / f"{cfg.get('result_name', 'phase2_pilot')}.json"
     json.dump(res, open(out, "w"), indent=2)
     print(json.dumps(res, indent=2))
     print(f"\nVERDICT: {verdict}   (saved -> {out})\nSTOP: report to user before Phase 3.")
