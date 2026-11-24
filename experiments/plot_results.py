@@ -192,6 +192,50 @@ def double_comp(rows, out):
     single_vs_double("auc", "ROC-AUC", "EXP-004c: ranking ability, single vs re-compressed", "4_auc.png")
 
 
+def exp004d(rows, out):
+    V = ["BASE", "A", "B", "C"]
+    VN = {"BASE": "BASE (EXP-004c)", "A": "A: per-bitrate calibration", "B": "B: mixed-bitrate probe",
+          "C": "C: + 4 kHz low-pass branch"}
+    S = {(r["variant"], r["condition"]): r for r in rows}
+    brs = ["64k", "32k", "16k", "8k"]
+    for k, (mode, ttl) in enumerate([("single", "single compression"), ("double", "re-compressed (64k → X)")], 1):
+        fig, ax = plt.subplots(figsize=(7.5, 4))
+        for j, v in enumerate(V):
+            ys = [S[v, f"{mode}_{b}"]["acc"] * 100 for b in brs]
+            lo = [y - S[v, f"{mode}_{b}"]["acc_lo"] * 100 for y, b in zip(ys, brs)]
+            hi = [S[v, f"{mode}_{b}"]["acc_hi"] * 100 - y for y, b in zip(ys, brs)]
+            ax.errorbar(brs, ys, yerr=[lo, hi], color=C[j], lw=2, marker="o", ms=5, capsize=3, label=VN[v])
+        ax.axhline(95, color=INK2, ls="--", lw=1); ax.text(3, 95.6, "target 95%", ha="right", fontsize=8, color=INK2)
+        ax.set_ylim(45, 101); ax.set_ylabel("Accuracy (%) with 95% CI"); ax.set_xlabel("Final MP3 bitrate")
+        ax.set_title(f"EXP-004d: accuracy vs bitrate, {ttl} (n=1,000)"); ax.legend(fontsize=8, loc="lower left")
+        save(fig, out, f"{k}_accuracy_{mode}.png")
+    fig, ax = plt.subplots(figsize=(8, 4))
+    cs = ["single_16k", "double_16k"]
+    n = len(V); w = 0.8 / n
+    for j, v in enumerate(V):
+        ys = [S[v, c]["acc"] * 100 for c in cs]
+        err = [[y - S[v, c]["acc_lo"] * 100 for y, c in zip(ys, cs)], [S[v, c]["acc_hi"] * 100 - y for y, c in zip(ys, cs)]]
+        xs = [x + (j - (n - 1) / 2) * w for x in range(len(cs))]
+        b = ax.bar(xs, ys, w * 0.92, color=C[j], label=VN[v], yerr=err, capsize=3, ecolor=INK2)
+        ax.bar_label(b, [f"{y:.1f}" for y in ys], fontsize=8, color=INK2, padding=8)
+    ax.axhline(95, color=INK2, ls="--", lw=1)
+    ax.set_xticks(range(len(cs)), ["16 kbps (single)", "16 kbps (re-compressed)"]); ax.set_ylim(85, 100)
+    ax.set_ylabel("Accuracy (%) with 95% CI"); ax.set_title("EXP-004d: the 16 kbps target (≥ 95%)")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=8)
+    save(fig, out, "3_target_16k.png")
+    conds = ["clean"] + [f"single_{b}" for b in brs] + [f"double_{b}" for b in brs]
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 4), sharey=False)
+    for j, v in enumerate(V):
+        a1.plot(range(len(conds)), [S[v, c]["false_alarm_rate"] * 100 for c in conds], color=C[j], lw=2, marker="o", ms=5, label=VN[v])
+        a2.plot(range(len(conds)), [S[v, c]["miss_rate"] * 100 for c in conds], color=C[j], lw=2, marker="o", ms=5, label=VN[v])
+    lbl = [c.replace("single_", "").replace("double_", "2×") for c in conds]
+    for a, t in [(a1, "False alarms: real voices called AI (%)"), (a2, "Misses: AI voices called real (%)")]:
+        a.set_xticks(range(len(conds)), lbl); a.set_title(t, fontsize=10); a.set_xlabel("Condition (2× = re-compressed)")
+    a1.set_yscale("symlog", linthresh=5); a2.legend(fontsize=8)
+    fig.suptitle("EXP-004d: where the errors come from", fontsize=11, y=1.02)
+    save(fig, out, "4_error_breakdown.png")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
@@ -212,6 +256,8 @@ def main():
                   list(_csv.DictReader(open(R / "confidence_stability.csv"))), O / "EXP-004b_confidence_stability")
     if (R / "double_compression.json").exists():
         double_comp(json.load(open(R / "double_compression.json")), O / "EXP-004c_recompression")
+    if (R / "exp004d.json").exists():
+        exp004d(json.load(open(R / "exp004d.json")), O / "EXP-004d_tweaks")
     print("plots written to", O)
 
 

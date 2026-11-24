@@ -78,3 +78,20 @@
 - **Model A:** AUC drops ~0.01 with re-compression (0.971 → 0.961 at 64k); accuracy ≈ unchanged (87–91%).
 - **Findings:** a second encode costs ≤ 2.5 pts accuracy and ≤ 0.04 confidence; the *last* (lowest) bitrate decides behaviour. The 8–16k collapse from EXP-004b is unchanged.
 - **Decision:** re-compression is not a separate problem; fixing low-bitrate calibration (EXP-005: multi-bitrate training + bitrate-aware calibration) covers it.
+
+## EXP-004d · 2026-11-24 · Small tweaks for 16 kbps (A/B/C), n = 1,000 — **A PASSES (winner); B partial; C fails**
+- **Goal:** raise 16 kbps accuracy (single + re-compressed) to ≥ 95% without losing > 0.5 pts at 32/64k.
+- **Test:** 1,000 new unseen-attack files (500/500, 2019 LA eval A07–A18), clean + MP3 64/32/16/8k single + re-compressed (64k → X). Train/val: 2019 LA train 300+100/class. Frozen WavLM-B+ layer-avg.
+- **Variants:** BASE = 32k probe, one calibrator (EXP-004c) · **A** = BASE + per-bitrate calibrator picked by final bitrate (app dropdown) · **B** = probe trained on clean+64+32+16k · **C** = BASE + parallel 4 kHz low-pass WavLM branch.
+- **Observed (accuracy, 95% CI):**
+  | cond | BASE | A | B | C |
+  |---|---|---|---|---|
+  | 64k / 2×64k | 98.2 / 98.4 | 98.4 / 97.9 | 98.0 / 98.0 | 99.1 / 98.8 |
+  | 32k / 2×32k | 98.1 / 97.8 | 98.1 / 97.8 | 97.7 / **97.0** | 98.1 / 97.7 |
+  | **16k / 2×16k** | 91.9 / 91.1 | **97.1 [96.1–98.1] / 96.7 [95.6–97.8]** | **97.5 / 96.9** | 92.7 / 92.2 |
+  | 8k / 2×8k | 51.2 / 51.9 | **94.2 / 93.8** | 61.1 / 62.3 | 50.6 / 50.8 |
+- **Errors at 16k:** false alarms (real → AI) BASE 16.0% → A 5.4%, B 4.2%; misses stay ≤ 1.4%.
+- **Verdict:** A meets every criterion (16k ≥ 95%; 32/64k within 0.5 pts) and also lifts **8k from 51% to 94%**. B hits 16k but loses 0.8 pts at 2×32k (rule fail) and does little at 8k. C does not help (16k 92.7%).
+- **Why A works:** AUC stays ≥ 0.987 at every bitrate → ranking survives; only the score offset drifts, which a 2-parameter calibrator per bitrate removes.
+- **Caveat:** A relies on the user's bitrate choice being roughly right; a wrong choice is untested → next: EXP-004e (mismatched dropdown).
+- **Decision:** adopt A (bitrate-aware calibration) as the deployment design.
