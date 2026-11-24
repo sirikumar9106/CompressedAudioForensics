@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# CompressedAudioForensics (Δ-Net) — Python dependencies
+# Tested: Python 3.12, Windows 11, NVIDIA RTX 50-series (CUDA 13.0 wheels)
+#
+# GPU install (RTX 50-series / Blackwell needs CUDA >= 12.8 wheels):
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu130
+#   pip install -r requirements.txt
+# Windows one-click: run setup.bat
+# ---------------------------------------------------------------------------
+torch>=2.7
+torchaudio>=2.7
+numpy>=1.24
+scipy>=1.10
+scikit-learn>=1.3
+soundfile>=0.12
+pyyaml>=6.0
+pytest>=7.4
+gradio>=4.0            # Phase 7 demo UI only
+
+# ---------------------------------------------------------------------------
+# NON-PIP REQUIREMENTS (comments only — pip ignores these lines)
+# ---------------------------------------------------------------------------
+# System:
+#   FFmpeg on PATH with libmp3lame, libopus and aac encoders
+#   https://ffmpeg.org/download.html   (Windows: winget install Gyan.FFmpeg)
+#
+# Datasets (NOT redistributed here — download manually, respect their licenses):
+#   1. ASVspoof 2019 Logical Access (LA.zip, ~7.1 GB) — training / dev / pilot
+#      https://datashare.ed.ac.uk/handle/10283/3336
+#      extract to: data/raw/LA/
+#   2. ASVspoof 2021 Deepfake (DF) evaluation set — locked final benchmark (Phase 6 only)
+#      https://zenodo.org/records/4835108
+#      keys/labels: https://www.asvspoof.org/index2021.html
+#      locked 1,000-file subset listed in: data/manifests/evaluation_manifest.csv
+#
+# Pretrained weights:
+#   Official ASVspoof 2021 DF RawNet2 baseline
+#   https://www.asvspoof.org/asvspoof2021/pre_trained_DF_RawNet2.zip
+#   place at: models/pre_trained_DF_RawNet2.pth

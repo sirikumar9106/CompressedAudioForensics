@@ -1,0 +1,38 @@
+# --- Datasets & large artifacts (download links in requirements.txt / README) ---
+data/raw/
+data/cache/*
+!data/cache/.gitkeep
+data/manifests/*.csv
+models/
+*.pth
+*.pt
+*.ckpt
+*.zip
+*.flac
+*.wav
+*.mp3
+*.ogg
+*.m4a
+
+# --- Experiment outputs / logs (may contain local paths) ---
+results/*
+!results/.gitkeep
+setup_log.txt
+
+# --- Environment ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Personal / secrets / OS ---
+.env
+*.env
+.vscode/
+.idea/
+.claude/
+desktop.ini
+Thumbs.db
+.DS_Store

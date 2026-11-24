@@ -1,0 +1,16 @@
+seed: 42
+dev_manifest: data/manifests/asvspoof2019_dev.csv
+pretrained: models/pre_trained_DF_RawNet2.pth
+cache_root: data/cache
+codec: mp3          # simulated platform degradation D_platform
+bitrate: 32k
+perturbations: [mulaw8, gaussian]   # gaussian = random-noise control (Baseline F)
+n_train: 150        # per class
+n_val: 50
+n_test: 100
+gate:
+  go_auc: 0.70
+  conditional_auc: 0.65
+  nogo_auc: 0.60
+  min_margin_over_noise: 0.08
+  max_confound_r: 0.20

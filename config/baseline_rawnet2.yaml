@@ -1,0 +1,12 @@
+seed: 42
+train_manifest: data/manifests/asvspoof2019_train.csv
+dev_manifest: data/manifests/asvspoof2019_dev.csv
+pretrained: models/pre_trained_DF_RawNet2.pth
+cache_root: data/cache
+codec: mp3
+bitrate: 32k
+batch_size: 32
+lr: 0.0001
+weight_decay: 0.0001
+epochs: 20
+patience: 5
