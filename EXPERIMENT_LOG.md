@@ -37,3 +37,17 @@
 - **Findings:** Δz is the worst of the three at every bitrate. Ranking (AUC) degrades only mildly with compression, but Model A's fixed-threshold accuracy collapses 90% → 75% at 8 kbps → operating-point drift, not lost separability.
 - **Caveat:** n=200 → EER resolution 1%, ±~4% CI; small EER differences are noise.
 - **Decision:** Δz closed. Threshold drift under compression supports the calibration fallback (spec §27/§35).
+
+## EXP-004 · 2026-11-24 · Frozen WavLM front end + linear probe (fair cross-attack) — **PROMISING (promote)**
+- **Goal:** test whether a self-supervised front end beats Model A on unseen attacks under compression.
+- **Protocol (new, fair):** probe train/val = 2019 LA **train** (A01–A06; 300+100 per class, same attacks Model A saw); test = EXP-002/003 200-file unseen set (A07–A18). Probe trained and tested per condition.
+- **Models:** Model A (official RawNet2 score); RawNet2 pooled-embedding probe; WavLM-Base+ (95M) and WavLM-Large (317M), frozen, fp16, mean+std pooling per layer → variants: last layer / all-layer average / best layer chosen on val.
+- **Observed (test AUC / EER):**
+  | cond | Model A | RawNet2 probe | WavLM-B+ last | **WavLM-B+ layer-avg** | WavLM-L layer-avg |
+  |---|---|---|---|---|---|
+  | clean | 0.962 / 11% | 0.963 / 11% | 0.985 / 6% | **0.9997 / 1%** | 0.9999 / 1% |
+  | MP3 32k | 0.964 / 9% | 0.969 / 10% | 0.985 / 5% | **0.9995 / 2%** | 0.9993 / 1% |
+  | MP3 8k | 0.944 / 7% | 0.955 / 11% | 0.988 / 4% | **0.9986 / 1%** | 0.9977 / 2% |
+- **Findings:** all-layer averaging ≫ last layer; Base+ ≈ Large (Base+ is 3× cheaper → preferred on 8 GB GPU). At 8 kbps, EER 7% → ~1%. Best-layer-on-val unreliable (val saturated).
+- **Caveats:** n=200 test (EER ±~3%); same corpus (VCTK speakers) for train/test → possible dataset shortcuts (silence/loudness, cf. EXP-002); needs cross-dataset check (2021 DF, Phase 6) and larger test.
+- **Decision:** promote WavLM-Base+ layer-avg as new static backbone. Next: verify on larger unseen set + shortcut controls before training anything.
