@@ -111,3 +111,12 @@
 - **Findings:** F beats A in all 9 conditions (+0.1 to +1.6 pts; largest at 16k). D ≈ A (mixed-bitrate training adds nothing once calibration is per-bitrate). E (MLP) is worse than linear → no benefit from a non-linear head on 600 training files. U ("Not sure") holds ≥ 95% down to 16k but drops to ~77% at 8k.
 - **Caveat:** individual CIs overlap slightly at 16k; the case for F rests on consistent wins across all conditions. Paired significance test to be added.
 - **Decision:** deployment design = **F** (RawBoost-augmented WavLM probe + per-bitrate calibration chosen by the dropdown); "Not sure" uses U and should warn the user when the audio looks like ≤ 8 kbps.
+
+## EXP-006 · 2026-11-25 · Real-world robustness of design F (n = 1,000) — **PASSES; one dropdown risk found**
+- **Goal:** (1) confirm F > A with a paired test; (2) cost of a wrong dropdown choice; (3) codecs never used in training/calibration (Opus = WhatsApp/Telegram, AAC).
+- **Setup:** EXP-005 features/probes reused (same 1,000 unseen-attack files). Opus 64/32/16/8k and AAC 64/32/16k newly encoded; dropdown uses the MP3-fitted calibrator of the same nominal bitrate.
+- **(1) McNemar F vs A:** F significantly better at 16k (p = 0.001), 2×16k (p = 0.003), 2×64k (p = 0.004), clean (p = 0.03); not significant at 64k/32k/2×32k and at 8k (p ≥ 0.08). F never significantly worse.
+- **(2) Wrong dropdown (F accuracy %, true → picked):** one step off costs ≤ 4.6 pts down to 16k (16k → 32k: 94.0). Picking a **higher** quality than true → false alarms (8k → 16k: 61.9, FA 76%). Picking a **lower** quality than true → missed fakes (64k → 8k: 67.6, miss 65%). "Not sure": 96.2 / 97.3 / 95.4 / 77.9 at 64/32/16/8k.
+- **(3) Unseen codecs (F + matching dropdown):** Opus 99.0 / 99.1 / 98.9 / **95.3** (64/32/16/8k); AAC 98.8 / 98.7 / 98.3 (64/32/16k). All ≥ 95%, beats A everywhere; "Not sure" ≥ 96% except Opus 8k (87.7, FA 25%).
+- **Findings:** F generalises to WhatsApp-type Opus without retraining. The only serious risk is a large dropdown error, worst when the user picks 8k for good-quality audio (fakes pass as real).
+- **Decision:** keep F. App: default dropdown = "Not sure"; warn on 8k choice; add automatic bandwidth check to flag dropdown choices inconsistent with the audio (next step).

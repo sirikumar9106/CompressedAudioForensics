@@ -237,6 +237,51 @@ def exp004d(rows, out, V=None, VN=None, tag="EXP-004d"):
     save(fig, out, "4_error_breakdown.png")
 
 
+def exp006(d, out):
+    mc = d["mcnemar"]
+    fig, ax = plt.subplots(figsize=(10, 4))
+    x = np.arange(len(mc))
+    ax.bar(x - 0.2, [r["acc_A"] * 100 for r in mc], 0.38, color=C[0], label="A (EXP-004d winner)")
+    ax.bar(x + 0.2, [r["acc_F"] * 100 for r in mc], 0.38, color=C[3], label="F (RawBoost-aug, EXP-005)")
+    for i, r in enumerate(mc):
+        star = "**" if r["p_value"] < 0.01 else ("*" if r["p_value"] < 0.05 else "n.s.")
+        ax.text(i, max(r["acc_A"], r["acc_F"]) * 100 + 0.4, f"{star}\np={r['p_value']:.3f}", ha="center", fontsize=7, color=INK2)
+    ax.set_xticks(x, [r["condition"].replace("single_", "").replace("double_", "2×") for r in mc])
+    ax.set_ylim(90, 101.5); ax.set_ylabel("Accuracy (%)"); ax.set_xlabel("Condition (2× = re-compressed)")
+    ax.set_title("EXP-006: paired McNemar test, F vs A (same 1,000 files; * p<0.05, ** p<0.01)")
+    ax.legend(loc="lower left", fontsize=8)
+    save(fig, out, "1_mcnemar_F_vs_A.png")
+    mm = d["mismatch"]
+    trues = list(dict.fromkeys(r["true"] for r in mm)); ch = list(dict.fromkeys(r["chosen"] for r in mm))
+    M = np.array([[next(r["acc"] for r in mm if r["true"] == t and r["chosen"] == c) * 100 for c in ch] for t in trues])
+    fig, ax = plt.subplots(figsize=(7.5, 4))
+    im_ = ax.imshow(M, cmap="Blues", vmin=50, vmax=100)
+    for i in range(len(trues)):
+        for j in range(len(ch)):
+            ax.text(j, i, f"{M[i, j]:.1f}", ha="center", va="center", fontsize=9, color="white" if M[i, j] > 80 else INK)
+    ax.set_xticks(range(len(ch)), [c if c != "notsure" else "Not sure" for c in ch]); ax.set_yticks(range(len(trues)), trues)
+    ax.set_xlabel("Bitrate the user picked in the dropdown"); ax.set_ylabel("True MP3 bitrate"); ax.grid(False)
+    fig.colorbar(im_, ax=ax, label="Accuracy (%)")
+    ax.set_title("EXP-006: what a wrong dropdown choice costs (method F)")
+    save(fig, out, "2_dropdown_mismatch_heatmap.png")
+    cd = d["codecs"]
+    keys = list(dict.fromkeys(f"{r['codec']} {r['bitrate']}" for r in cd)); modes = list(dict.fromkeys(r["mode"] for r in cd))
+    for k_, (metric, ylab, nm, ylim) in enumerate([("acc", "Accuracy (%)", "3_unseen_codecs_accuracy.png", (40, 101)),
+                                                    ("false_alarm", "False alarms: real called AI (%)", "4_unseen_codecs_false_alarms.png", None)]):
+        fig, ax = plt.subplots(figsize=(10, 4))
+        n = len(modes); w = 0.8 / n
+        for j, m in enumerate(modes):
+            ys = [next(r[metric] for r in cd if f"{r['codec']} {r['bitrate']}" == k and r["mode"] == m) * 100 for k in keys]
+            b = ax.bar([i + (j - (n - 1) / 2) * w for i in range(len(keys))], ys, w * 0.92, color=[C[3], C[0], C[4]][j], label=m)
+            ax.bar_label(b, [f"{y:.0f}" for y in ys], fontsize=7, color=INK2, padding=1)
+        ax.set_xticks(range(len(keys)), [k.replace("opus", "Opus").replace("aac", "AAC") for k in keys])
+        if ylim:
+            ax.set_ylim(*ylim); ax.axhline(95, color=INK2, ls="--", lw=1)
+        ax.set_ylabel(ylab); ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=3, fontsize=8)
+        ax.set_title(f"EXP-006: codecs never seen in training or calibration — {ylab.split(':')[0].lower()}")
+        save(fig, out, nm)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
@@ -281,6 +326,8 @@ def main():
         ax.set_title("EXP-005: overall ranking of methods (higher is better)")
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=8)
         save(fig, o5, "5_overall_ranking.png")
+    if (R / "exp006.json").exists():
+        exp006(json.load(open(R / "exp006.json")), O / "EXP-006_real_world_robustness")
     print("plots written to", O)
 
 
