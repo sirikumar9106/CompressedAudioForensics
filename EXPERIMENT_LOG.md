@@ -51,3 +51,16 @@
 - **Findings:** all-layer averaging ≫ last layer; Base+ ≈ Large (Base+ is 3× cheaper → preferred on 8 GB GPU). At 8 kbps, EER 7% → ~1%. Best-layer-on-val unreliable (val saturated).
 - **Caveats:** n=200 test (EER ±~3%); same corpus (VCTK speakers) for train/test → possible dataset shortcuts (silence/loudness, cf. EXP-002); needs cross-dataset check (2021 DF, Phase 6) and larger test.
 - **Decision:** promote WavLM-Base+ layer-avg as new static backbone. Next: verify on larger unseen set + shortcut controls before training anything.
+
+## EXP-004b · 2026-11-24 · Confidence stability across bitrates (same files) — **WavLM UNSTABLE below 32 kbps**
+- **Goal:** check if a file's calibrated confidence holds as the *same* audio is compressed harder (deployment: codec unknown).
+- **Setup:** EXP-004 test set (200 unseen-attack files) scored at clean, MP3 320/128/64/32/16/8k. Detectors Platt-calibrated on their own 2019 LA train-split val: Model A (clean cal), WavLM-B+ layer-avg probe trained on clean, and on MP3 32k. One fixed model per detector (no per-bitrate retraining).
+- **Observed (8 kbps vs clean):**
+  | detector | AUC | acc@0.5 | verdict flips | mean P(real) on real voices |
+  |---|---|---|---|---|
+  | Model A | 0.944 | 87.0% | 12.5% | 0.94 → 0.78 |
+  | WavLM probe (train clean) | 0.978 | **50.5%** | **49%** | 0.98 → **0.01** |
+  | WavLM probe (train 32k) | 0.976 | **51.0%** | **50.5%** | 0.99 → **0.05** |
+- **Findings:** stable down to 32k (flips ≤ 5%). At 16k and 8k, WavLM pushes nearly every REAL voice to "AI" (massive false alarms) though ranking (AUC) stays ≥ 0.976. Model A is less accurate but far more confidence-stable.
+- **Why:** probe only saw ≥ 32k audio; 8k MP3 (band-limited ~3–4 kHz) is out-of-distribution, so the score shifts as a whole. EXP-004's 8k result used an 8k-trained probe and hid this.
+- **Decision:** WavLM front end kept, but must be trained on a multi-bitrate mix (incl. 8–16k) and/or given per-condition calibration + an "uncertain" output. → next experiment.
