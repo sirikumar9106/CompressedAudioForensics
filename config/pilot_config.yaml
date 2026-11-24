@@ -1,3 +1,4 @@
+# Pre-registered Phase 2 pilot (EXP-001). Result: NO-GO, see EXPERIMENT_LOG.md
 seed: 42
 dev_manifest: data/manifests/asvspoof2019_dev.csv
 pretrained: models/pre_trained_DF_RawNet2.pth

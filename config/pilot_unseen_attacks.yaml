@@ -1,4 +1,4 @@
-# EXP-002 (exploratory): same protocol as pilot_config.yaml, but on ASVspoof 2019 LA EVAL attacks
+# EXP-002 (exploratory, result: NO-GO): same protocol as pilot_config.yaml, but on ASVspoof 2019 LA EVAL attacks
 # never seen by Model A. A16/A19 excluded (same algorithms as seen A04/A06).
 seed: 42
 dev_manifest: data/manifests/asvspoof2019_eval.csv
