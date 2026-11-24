@@ -90,3 +90,10 @@ def test_benchmark_isolation():
     for d in ["src/data", "src/training", "experiments"]:
         for f in (ROOT / d).glob("*.py"):
             assert "evaluation_manifest.csv\"" not in f.read_text() or f.name == "run_phase0_audit.py", f
+
+
+def test_checkpoint_key_layout():
+    """Regression (EXP-001): official RawNet2 checkpoint stores FMS layers as fc_attention{i}.0.*"""
+    keys = set(RawNet2().state_dict().keys())
+    assert "fc_attention0.0.weight" in keys and "fc_attention5.0.bias" in keys
+    assert not any(k.startswith("Sinc_conv") for k in keys)  # fixed filterbank, no stored tensors
