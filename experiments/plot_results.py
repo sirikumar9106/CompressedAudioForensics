@@ -122,6 +122,51 @@ def ssl(rows, out):
     save(fig, out, "3_layer_aggregation.png")
 
 
+def stability(summ, rows, out):
+    import csv as _csv
+    dets = list(dict.fromkeys(r["detector"] for r in summ))
+    conds = list(dict.fromkeys(r["condition"] for r in summ))
+    S = {(r["detector"], r["condition"]): r for r in summ}
+    fig, axs = plt.subplots(1, len(dets), figsize=(13, 3.8), sharey=True)
+    for ax, d in zip(axs, dets):
+        ax.plot(conds, [S[d, c]["mean_p_bonafide_on_bonafide"] for c in conds], color=C[2], lw=2, marker="o", ms=5, label="Real voices")
+        ax.plot(conds, [S[d, c]["mean_p_bonafide_on_spoof"] for c in conds], color=C[1], lw=2, marker="o", ms=5, label="AI voices")
+        ax.axhline(0.5, color=INK2, ls="--", lw=1); ax.set_title(d, fontsize=9); ax.set_xlabel("MP3 bitrate")
+    axs[0].set_ylabel("Mean P(real)"); axs[0].legend(fontsize=8)
+    fig.suptitle("EXP-004b: average confidence per class as compression increases (same 200 files)", fontsize=11, y=1.02)
+    save(fig, out, "1_mean_confidence_per_class.png")
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for j, d in enumerate(dets):
+        ax.plot(conds, [S[d, c]["decision_flip_rate_vs_clean"] * 100 for c in conds], color=C[j], lw=2, marker="o", ms=5, label=d)
+    ax.set_ylabel("Files whose verdict flipped vs clean (%)"); ax.set_xlabel("MP3 bitrate"); ax.legend(fontsize=8)
+    ax.set_title("EXP-004b: decision flips caused by compression alone")
+    save(fig, out, "2_decision_flip_rate.png")
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 3.8))
+    for j, d in enumerate(dets):
+        a1.plot(conds, [S[d, c]["auc"] for c in conds], color=C[j], lw=2, marker="o", ms=5, label=d)
+        a2.plot(conds, [S[d, c]["acc@0.5"] * 100 for c in conds], color=C[j], lw=2, marker="o", ms=5, label=d)
+    a1.set_title("Ranking (AUC): stays high"); a1.set_ylabel("ROC-AUC"); a2.set_title("Accuracy at 0.5: collapses for WavLM at 8k")
+    a2.set_ylabel("Accuracy (%)"); a2.axhline(50, color=INK2, ls="--", lw=1)
+    for a in (a1, a2): a.set_xlabel("MP3 bitrate")
+    a2.legend(fontsize=7, loc="lower left")
+    fig.suptitle("EXP-004b: separability survives, calibrated confidence does not", fontsize=11, y=1.02)
+    save(fig, out, "3_ranking_vs_accuracy.png")
+    data = {}
+    for r in rows:
+        if r["label"] == "1":
+            data.setdefault((r["detector"], r["condition"]), []).append(float(r["p_bonafide"]))
+    fig, axs = plt.subplots(1, len(dets), figsize=(13, 3.8), sharey=True)
+    for ax, d in zip(axs, dets):
+        bp = ax.boxplot([data[d, c] for c in conds], tick_labels=conds, widths=0.5, patch_artist=True,
+                        medianprops={"color": INK}, flierprops={"markersize": 3})
+        for b in bp["boxes"]:
+            b.set_facecolor(C[2]); b.set_alpha(0.6)
+        ax.axhline(0.5, color=INK2, ls="--", lw=1); ax.set_title(d, fontsize=9); ax.set_xlabel("MP3 bitrate")
+    axs[0].set_ylabel("P(real) for genuine human voices")
+    fig.suptitle("EXP-004b: spread of confidence on REAL voices (false-alarm risk below 0.5)", fontsize=11, y=1.02)
+    save(fig, out, "4_real_voice_confidence_spread.png")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
@@ -136,6 +181,10 @@ def main():
         sweep(json.load(open(R / "bitrate_sweep.json")), O / "EXP-003_bitrate_sweep")
     if (R / "ssl_probe.json").exists():
         ssl(json.load(open(R / "ssl_probe.json")), O / "EXP-004_wavlm_probe")
+    if (R / "confidence_stability.json").exists():
+        import csv as _csv
+        stability(json.load(open(R / "confidence_stability.json")),
+                  list(_csv.DictReader(open(R / "confidence_stability.csv"))), O / "EXP-004b_confidence_stability")
     print("plots written to", O)
 
 
