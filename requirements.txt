@@ -21,6 +21,7 @@ fastapi>=0.110          # web app (src/app/server.py)
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
 joblib>=1.3
+requests>=2.31           # dataset downloader
 
 # ---------------------------------------------------------------------------
 # NON-PIP REQUIREMENTS (comments only — pip ignores these lines)

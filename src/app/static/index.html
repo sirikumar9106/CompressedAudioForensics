@@ -317,7 +317,7 @@ function show(j){
   $("#pct").textContent=Math.round(v*100)+"%"; $("#pctLbl").textContent=real?"human":"AI-generated";
   $("#arc").style.strokeDashoffset=351.86*(1-v);
   $("#verdict").textContent=j.verdict;
-  $("#vsub").textContent = j.suspicious_span
+  $("#vsub").textContent = (j.suspicious_span && j.level==="warn")
      ? `Mostly human-sounding, but ${j.suspicious_span[0]}–${j.suspicious_span[1]} s scores strongly as AI-generated.`
      : `Source: ${j.platform}. ${j.windows.length} window${j.windows.length>1?"s":""} analysed.`;
   $("#kMargin").textContent=j.margin.toFixed(2);
