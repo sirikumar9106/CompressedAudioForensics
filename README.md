@@ -35,6 +35,14 @@ The output is a calibrated probability, a decision margin, and plain-language sa
 > Research status: hypothesis under evaluation. A pre-registered GO/NO-GO pilot gates full training.
 > Results are probabilistic and are not legal evidence.
 
+## Results so far
+| Exp | What was tested | Outcome |
+|---|---|---|
+| EXP-001 | Δz (μ-law differential) probe, seen attacks | NO-GO: Δz AUC 0.913 < plain embedding 0.971 |
+| EXP-002 | Same, on unseen attacks | NO-GO: Δz 0.947 < 0.979; partly a loudness cue |
+
+Full details: [`EXPERIMENT_LOG.md`](EXPERIMENT_LOG.md).
+
 ## Pipeline
 ```
 uploaded file y ──► shared RawNet2 encoder ──► z_y  ─┐
