@@ -64,3 +64,17 @@
 - **Findings:** stable down to 32k (flips ≤ 5%). At 16k and 8k, WavLM pushes nearly every REAL voice to "AI" (massive false alarms) though ranking (AUC) stays ≥ 0.976. Model A is less accurate but far more confidence-stable.
 - **Why:** probe only saw ≥ 32k audio; 8k MP3 (band-limited ~3–4 kHz) is out-of-distribution, so the score shifts as a whole. EXP-004's 8k result used an 8k-trained probe and hid this.
 - **Decision:** WavLM front end kept, but must be trained on a multi-bitrate mix (incl. 8–16k) and/or given per-condition calibration + an "uncertain" output. → next experiment.
+
+## EXP-004c · 2026-11-24 · Re-compression / forwarding (64k → X) — **final bitrate dominates; re-compression adds little**
+- **Goal:** check whether a voice note compressed twice (sent at 64k, forwarded at X) keeps the same confidence as single compression.
+- **Setup:** EXP-004b test set (200 unseen-attack files) and detectors/calibration unchanged. Double = MP3 64k → decode → MP3 X; X ∈ {320,128,64,32,16,8}k. Compared with single MP3 X.
+- **Observed (WavLM-B+ probe trained on 32k; single → double):**
+  | X | acc@0.5 | P(real) on real | confidence gap real−fake |
+  |---|---|---|---|
+  | 64k | 98.5% → 98.5% | 0.991 → 0.986 | 0.970 → 0.965 |
+  | 32k | 98.5% → 98.0% | 0.969 → 0.962 | 0.966 → 0.958 |
+  | 16k | 93.0% → 90.5% | 0.835 → 0.797 | 0.833 → 0.794 |
+  | 8k | 51.0% → 51.5% | 0.045 → 0.038 | 0.045 → 0.038 |
+- **Model A:** AUC drops ~0.01 with re-compression (0.971 → 0.961 at 64k); accuracy ≈ unchanged (87–91%).
+- **Findings:** a second encode costs ≤ 2.5 pts accuracy and ≤ 0.04 confidence; the *last* (lowest) bitrate decides behaviour. The 8–16k collapse from EXP-004b is unchanged.
+- **Decision:** re-compression is not a separate problem; fixing low-bitrate calibration (EXP-005: multi-bitrate training + bitrate-aware calibration) covers it.
