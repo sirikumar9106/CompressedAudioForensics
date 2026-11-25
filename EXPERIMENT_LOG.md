@@ -146,3 +146,33 @@
   | ASVspoof 2019 eval MP3 16 kbps | 88.5% | 2.4% | 20.6% | 0.963 | 10.7% |
 - **Findings:** real-world false alarms collapse 83.8% → 0.7% and ranking improves (EER halves 16.6% → 8.6%), so diverse real speech fixed the core failure. But the threshold fitted on in-domain validation is now too strict out of domain: half of In-the-Wild fakes pass as real. Lab performance on ASVspoof 2019 drops vs method F (EER 1% → 6.5%), expected since 2019 is no longer in training.
 - **Decision:** keep the EXP-008 model as the new base. Next: EXP-008b adds LibriSeVoc (+ ASVspoof 2019 LA train) and fixes the operating point (calibrate on a mixed held-out set incl. compressed real-world-like speech, report EER-threshold results), then re-test on In-the-Wild + the user's own recordings.
+
+## EXP-009a · 2026-11-25 · Spectrogram "fingerprint" image + CNN — **VIABLE BUT WORSE THAN WavLM**
+- **Goal:** test the image idea: turn audio into a 3-channel picture and classify it with a CNN; compare with every earlier method on the same 1,000 unseen-attack ASVspoof 2019 files.
+- **Model:** picture = R mel (0–8 kHz), G fine spectrum (0–4 kHz, n_fft 1024), B phase instantaneous-frequency deviation (0–4 kHz), each 128×400; ResNet-18 (ImageNet weights), 4,960 balanced 2019 LA train clips, 15 epochs, per-bitrate calibration (same protocol as method F).
+- **Observed (accuracy % / EER %):**
+  | method | clean | 64k | 32k | 16k | 8k | 2×16k | 2×8k |
+  |---|---|---|---|---|---|---|---|
+  | WavLM F (EXP-005) | **98.9 / 1.0** | **98.9 / 0.8** | **98.9 / 1.2** | **98.5 / 1.8** | **94.7 / 4.8** | **98.3 / 1.4** | **93.9 / 5.8** |
+  | Image CNN | 91.1 / 4.4 | 93.5 / 5.2 | 92.2 / 5.8 | 93.4 / 6.4 | 91.5 / 8.2 | 92.9 / 7.0 | 89.8 / 8.2 |
+  | RawNet2 (official) | 92.6 / 6.4 | 92.8 / 7.0 | 93.0 / 6.6 | 92.6 / 6.2 | 91.6 / 8.2 | 92.9 / 6.8 | 90.8 / 9.4 |
+  | Δ-Net | 84.5 / 15.2 | 83.4 / 15.4 | 82.3 / 17.6 | 83.8 / 15.6 | 77.5 / 21.8 | 83.5 / 16.0 | 76.7 / 21.6 |
+- **Findings:** image CNN ≈ RawNet2 (better EER on clean/64k/32k, equal at 8k), far above Δ-Net, but 5–7 points below WavLM F everywhere. With a single calibration it collapses at 16k/8k (≈ 80%, misses 40%) → like every method, needs bitrate-aware calibration.
+- **Decision:** image route is viable but not competitive alone. Test in EXP-009b whether compression-stable picture features add anything when combined with WavLM.
+- **Graphs:** `mapped_results/EXP-009a_image_cnn/`.
+
+## EXP-009b · 2026-11-25 · Compression-stable picture features + combination with WavLM — **FAILS; image route closed**
+- **Goal:** keep only picture features that (a) stay the same after compression and (b) separate real from fake, weight them, retrain the CNN, and combine it with WavLM F.
+- **Feature audit (16 frequency slices per view):** stability = min correlation clean vs 16k/8k; separation = |AUC−0.5|×2 at 16k; weight = stability × separation, kept if ≥ 25% of max. Kept: mel slices 1–9, fine-spectrum 0–8, phase slice 0 only. **Phase barely survives compression** (mean stability 0.08); high frequencies are destroyed by every codec.
+- **Model:** ResNet-18 on the weighted, selected picture; trained with clean + 32/16/8k copies. Combination: (i) average of log-odds, (ii) per-bitrate learned weights; McNemar test vs F.
+- **Observed (accuracy % / EER %):**
+  | method | clean | 64k | 32k | 16k | 8k | 2×8k |
+  |---|---|---|---|---|---|---|
+  | WavLM F alone | **98.9 / 1.0** | **98.9 / 0.8** | **98.9 / 1.2** | **98.5 / 1.8** | **94.7 / 4.8** | **93.9 / 5.8** |
+  | selected-feature CNN | 84.8 / 11.2 | 87.3 / 10.3 | 87.4 / 11.0 | 86.6 / 12.2 | 86.7 / 13.4 | 87.0 / 12.4 |
+  | F + CNN (average) | 87.6 / 4.0 | 88.8 / 3.0 | 91.1 / 4.6 | 92.2 / 4.0 | 90.8 / 6.8 | 91.0 / 7.6 |
+  | F + CNN (learned weights) | 85.8 / 4.2 | 88.0 / 3.0 | 88.9 / 5.6 | 89.5 / 5.6 | 88.6 / 8.4 | 88.8 / 8.6 |
+- **Significance:** combination worse than F in all 9 conditions (McNemar p < 0.001; files only F got right 93–139 vs only combined 6–42).
+- **Why:** removing unstable features removed most of the useful signal (CNN drops 91 → 85–87%); the CNN's errors are not complementary to WavLM, so mixing in its scores only adds noise and pulls misses up (miss 21–25% on clean).
+- **Decision:** image/spectrogram route closed with evidence. Keep WavLM; continue real-world work with EXP-008b.
+- **Graphs:** `mapped_results/EXP-009b_selected_features_fusion/`.
