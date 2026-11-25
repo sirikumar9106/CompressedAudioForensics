@@ -1,114 +1,107 @@
-# CompressedAudioForensics — Δ-Net
+# CompressedAudioForensics
 
 **Detecting AI-cloned voices in compressed, real-world audio (WhatsApp, Telegram, phone calls).**
 
 ## Why this project exists
 Online voice scams are growing fast. With a few seconds of someone's voice, free AI tools can clone it, and
 fraudsters use these clones to call or send voice notes pretending to be a family member, a boss, a bank officer
-or the police, usually asking for money urgently.
+or the police, usually asking for money urgently. Human judgement fails against modern clones, and most AI
+detectors are trained on clean studio audio, while real scam audio arrives heavily compressed by messaging apps.
+This project builds a detector for the audio people *actually* receive: one compressed file, no original to compare.
 
-The protections people rely on today are not dependable:
-- **Human judgement** fails: modern clones sound natural, especially over a noisy call.
-- **Existing AI detectors** are trained on clean studio recordings. Real scam audio arrives through WhatsApp,
-  Telegram or phone networks that compress it heavily, wiping out the tiny clues those detectors look for.
-  The result is **false alarms** (a real relative flagged as fake) and **missed fakes** (a clone marked as real).
-- **Comparing with the original** is impossible: the victim only ever has the one file they received.
+## Result
+The final model (**EXP-010**) reaches **94.6% accuracy on 2,000 real-world clips it never saw**, catches
+**98.5% of voices from 31 AI voice tools it was never trained on** (ElevenLabs, OpenAI, MiniMax, Qwen …), and
+passed a live test with real and AI voices shared over WhatsApp.
 
-## What this project does
-CompressedAudioForensics builds a detector designed for the audio people *actually* receive. Instead of looking
-for clues that compression has already destroyed, it deliberately compresses the received file once more in a
-controlled way and measures **how the voice reacts**. The idea being tested: real human speech and AI-generated
-speech respond differently to further degradation. The tool returns a probability, how confident it is, and
-practical safety advice (call back on a known number, never send money based on a voice message alone).
+![Real-world benchmark across experiments](mapped_results/journey_in_the_wild.png)
 
-The project is run as a proper research study: a pre-registered go/no-go pilot, a locked test set that is never
-seen during development, comparison against standard baselines, and confidence intervals on every result.
+| Test (never trained on) | Accuracy | Real voice called AI | AI voice called real | EER |
+|---|---|---|---|---|
+| In-the-Wild: 2,000 clips of 58 public figures from online videos | **94.6%** | 7.1% | 3.7% | 5.1% |
+| MLAAD: 31 held-out TTS / voice-cloning systems | **98.5%** | 0.1% | 3.0% | 1.2% |
+| ASVspoof 2019 LA (unseen attacks), clean / MP3 16 kbps | 97.9 / 97.0% | 0.4 / 1.2% | 3.8 / 4.8% | 1.8 / 2.8% |
 
-## The approach (technical)
-Δ-Net works on **the single compressed file you received**. It applies a controlled, deterministic secondary
-degradation to that same file (8-bit μ-law companding), passes both versions through one shared encoder, and
-studies **how the internal representation shifts** (Δz = φ(y) − φ(y′)). The hypothesis under test: real and
-synthetic speech react differently to further degradation, even after heavy compression.
-The output is a calibrated probability, a decision margin, and plain-language safety advice
-(“call back on a known number; don’t send money”).
-
-> Research status: the original Δ-Net hypothesis was rejected by its pre-registered pilot (kept as a documented
-> negative result). The project now builds on a WavLM front end; see Results.
-> Results are probabilistic and are not legal evidence.
-
-## Results so far
-All tests use only the compressed file (no clean original), on attacks the detector never saw in training.
-Full details in [`EXPERIMENT_LOG.md`](EXPERIMENT_LOG.md); graphs in [`mapped_results/`](mapped_results/).
-
-| Exp | What was tested | Outcome |
-|---|---|---|
-| EXP-001 | Δ-Net idea: compare file vs its own μ-law re-degraded copy (seen attacks) | NO-GO: Δz AUC 0.913 < plain embedding 0.971 |
-| EXP-002 | Same, on unseen attacks | NO-GO: Δz 0.947 < 0.979; partly a loudness cue |
-| EXP-003 | Official ASVspoof RawNet2 across MP3 320→8 kbps | Ranking holds (AUC 0.96→0.94) but default-threshold accuracy drops 90%→75% |
-| EXP-004 | Frozen **WavLM** front end vs official model (fair cross-attack test) | WavLM wins: EER ~1–2% vs 7–11% at every bitrate |
-| EXP-004b | Same files scored at every bitrate with ONE model (unknown-codec use) | Stable to 32 kbps; at 8–16 kbps WavLM flags most real voices as fake → needs bitrate-aware calibration |
-| EXP-004c | Re-compression (forwarded voice notes: 64 kbps → X) | Second encode costs ≤ 2.5 pts; the final bitrate decides behaviour |
-
-**Current direction:** WavLM-based detector trained on mixed bitrates, with the user's bitrate selection
-choosing the calibration, plus an "uncertain" verdict when confidence is low.
-
-## Pipeline
+## The final model (EXP-010)
 ```
-uploaded file y ──► shared RawNet2 encoder ──► z_y  ─┐
-       └─ μ-law(y) = y′ ──► same encoder ──► z_y′ ───┼─► [mean z_y | mean z_y′ | mean Δz | std Δz | cos-dist] (1,025-d)
-                                                     └─► MLP ──► Platt calibration ──► probability + advice
+any audio file ─► FFmpeg decode (16 kHz mono) ─► 4 s windows, 50% overlap
+   └─► WavLM-Base+ (CNN + 12 transformer layers, top 8 fine-tuned)
+         ├─ main branch:    learned weights over all 13 layers ─► attentive stats pooling ─► MLP ─┐
+         └─ texture branch: learned weights over layers 0–6    ─► attentive stats pooling ─► MLP ─┴─► summed score
+   ─► median over speech windows ─► Platt calibration ─► verdict + timeline + 6 diagnostic images
 ```
+- **Training data (39,472 clips, balanced real/AI inside every source):** ASVspoof 5 (crowdsourced speakers),
+  Fake-or-Real, LibriSeVoc (6 neural vocoders), ASVspoof 2019 LA, and **MLAAD** (143 modern TTS / cloning systems).
+- **Compression robustness:** every clip also has a copy encoded with MP3 / Opus / AAC at 8–64 kbps, so the model
+  learns the voice, not the codec.
+- **Texture branch:** diagnostics showed the earlier model judged only by how *natural* the speech sounded (top
+  WavLM layer). The second branch looks only at the low "sound texture" layers, where synthesis artefacts live.
+- **Honest testing:** 31 TTS systems kept out of training entirely; In-the-Wild and ASVspoof 2019 eval never trained on.
 
-## Setup
+![Detection rate per unseen AI voice system](mapped_results/EXP-010_modern_tts/2_unseen_tts_systems.png)
+
+## How we got here
+Full write-ups in [`EXPERIMENT_LOG.md`](EXPERIMENT_LOG.md); graphs for every experiment in [`mapped_results/`](mapped_results/).
+
+**Ideas that failed**
+- **EXP-001/002 · Δ-Net (original hypothesis).** Re-degrade the received file (μ-law) and measure how the voice
+  representation shifts. Pre-registered pilot: the shift (AUC 0.91–0.95) was *weaker* than the plain embedding
+  (0.97–0.98) and partly a loudness cue. Rejected and kept as a documented negative result.
+- **EXP-009a/b · Spectrogram "fingerprint" images + CNN.** Mel, fine-spectrum and phase pictures with ResNet-18:
+  91–93% vs 98–99% for WavLM. Phase information does not survive compression (stability 0.08); keeping only
+  compression-stable features dropped the CNN to 85–87%, and fusing it with WavLM was significantly worse in all
+  9 conditions (McNemar p < 0.001). Image route closed.
+
+**Lab successes that failed in real life**
+- **EXP-003 → 006 · Frozen WavLM + bitrate-aware calibration (method F).** The official RawNet2 baseline lost
+  15 points of accuracy at 8 kbps. A frozen WavLM front end with a linear probe reached EER 1–2% at every bitrate;
+  per-bitrate calibration chosen from the app's "source app" dropdown and RawBoost augmentation gave
+  **98–99% down to 16 kbps and 95% at 8 kbps**, including Opus (WhatsApp) and AAC it never saw, robust to
+  re-compression (forwarded voice notes). Built into a web app.
+- **EXP-007 · Reality check.** A live recording of a real voice was called AI. On In-the-Wild, method F called
+  **83.8% of real voices AI**. Cause: all "real" training speech came from one studio corpus (VCTK), so any other
+  microphone or room looked "not real". Lesson: lab accuracy on one corpus says nothing about real life.
+- **EXP-008/008b · Fine-tuning on diverse real speech.** Partially fine-tuned WavLM on ASVspoof 5, Fake-or-Real,
+  LibriSeVoc and ASVspoof 2019, balanced inside every dataset. False alarms fell 83.8% → 2.1% and accuracy rose to
+  84.5%, and the live test on a real voice passed. But **every clip from a modern online voice-cloning tool scored
+  "100% human"**. New per-file diagnostics (removing frequency bands / WavLM layers and measuring the score change)
+  showed why: the decision came almost only from WavLM's top layer, which judges naturalness, and the training
+  fakes were all older-generation TTS.
+
+**What we applied in EXP-010:** modern TTS fakes (MLAAD), a texture branch on the low layers, more fine-tuned layers,
+held-out generators for honest testing, and live tests before claiming success.
+
+## Web app
+`run_app.bat` starts a local web app (FastAPI, nothing leaves the machine; uploads are deleted after analysis).
+Upload a voice note, optionally pick the source app, and get a verdict, a per-window confidence timeline and six
+diagnostic images (spectrogram, time × frequency map, frequency-band and WavLM-layer importance, attention,
+acoustic profile). Results are probabilistic and are not legal evidence.
+
+## Setup and run
 ```bash
 # Windows: double-click setup.bat  (creates .venv, picks the right CUDA build, installs FFmpeg)
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu130
 pip install -r requirements.txt
-pytest tests/
 ```
-Datasets and pretrained weights are **not** included — see the bottom of `requirements.txt` for links and paths.
-
-## Run
-| Phase | Command |
+| Step | Command |
 |---|---|
-| 0 Environment / audit | `python experiments/run_phase0_audit.py` |
-| 1 Manifests (+ MP3 cache) | `python experiments/prepare_data.py [--cache train dev]` |
-| 2 GO/NO-GO pilot | `python experiments/run_phase2_pilot.py` |
-| 3 Static baseline B | `python experiments/run_training.py --model baseline_b --config config/baseline_rawnet2.yaml` |
-| 4 Δ-Net MVP | `python experiments/run_training.py --model deltanet --config config/delta_net_mvp.yaml` |
-| 5 Ablations | `... --model deltanet --set perturbation=gaussian` (etc.) |
-| EXP-003 | `python experiments/run_bitrate_sweep.py` |
-| EXP-004 | `python experiments/run_ssl_probe.py` |
-| EXP-004b | `python experiments/run_confidence_stability.py` |
-| EXP-004c | `python experiments/run_double_compression.py` |
-| EXP-004d | `python experiments/run_exp004d.py` |
-| EXP-005 | `python experiments/run_exp005.py` |
-| EXP-006 | `run_exp006.bat` (or `python experiments/run_exp006.py`) |
-| EXP-007 | `run_exp007.bat` (or `python experiments/run_exp007_inthewild.py`) |
-| EXP-008 | `run_exp008.bat` (data build + fine-tuning + tests) |
-| EXP-009a / 009b | `run_exp009a.bat` / `run_exp009b.bat` |
+| Download datasets | `download_datasets.bat`, `download_mlaad.bat` (needs `HF_TOKEN`, MLAAD terms accepted) |
+| Train + test the final model | `run_exp010.bat` |
+| Web app | `run_app.bat` → http://127.0.0.1:7860 |
+| Earlier experiments | `run_exp006.bat` … `run_exp009b.bat`, or `python experiments/<script>.py` |
 
-Each experiment writes its numbers to `results/`; the graphs from every run are kept in `mapped_results/` and the write-ups in `EXPERIMENT_LOG.md`.
+Datasets and pretrained weights are **not** included; links and paths are listed in `requirements.txt`.
 
 ## Repository layout
 ```
-config/        YAML configs (pilot, baseline, Δ-Net)
-src/data/      audio standardisation, FFmpeg codec cache, manifests, dataset
-src/models/    μ-law engine, RawNet2 backbone, 1,025-d differential head, Δ-Net
-src/training/  weighted CE, training loop
-src/evaluation EER / AUC / bootstrap CI (pure NumPy), Platt calibration
-src/app/       single-file inference engine (no clean reference allowed)
-src/utils/     locked-benchmark guard
-experiments/   one script per experiment (re-runs it end to end)
-mapped_results/ graphs per experiment (EXP-001 … EXP-009b)
-tests/         shape, weight-sharing, quantisation, metric and isolation tests
+src/models/     WavLM detector (main + texture branch), RawNet2, Δ-Net
+src/app/        web app: server, diagnostics, single-page UI
+src/data/       audio loading, FFmpeg codec simulation, manifests
+src/evaluation/ EER / AUC / bootstrap CI, Platt calibration
+experiments/    one script per experiment
+mapped_results/ graphs per experiment (EXP-001 … EXP-010)
 ```
 
-## Notes
-- Labels: 1 = bona fide, 0 = spoof. Scores: higher = more bona fide.
-- Native RawNet2 frame features are [B, 29, 128]; Δ-Net adds a learnable 128→256 projection to keep the
-  1,025-d contract (`proj_dim: null` gives a 513-d variant). The frozen pilot uses native 128-d features.
-- The 2021 DF evaluation subset is locked: code refuses to load it before Phase 6.
-
 ## Data & licences
-ASVspoof 2019 / 2021 data are distributed by their organisers under their own licences and are not redistributed here.
+ASVspoof 2019/5, Fake-or-Real, LibriSeVoc, In-the-Wild and MLAAD (CC BY-NC 4.0) are distributed by their authors
+under their own licences and are not redistributed here. Research use only.
