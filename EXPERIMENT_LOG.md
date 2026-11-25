@@ -176,3 +176,14 @@
 - **Why:** removing unstable features removed most of the useful signal (CNN drops 91 → 85–87%); the CNN's errors are not complementary to WavLM, so mixing in its scores only adds noise and pulls misses up (miss 21–25% on clean).
 - **Decision:** image/spectrogram route closed with evidence. Keep WavLM; continue real-world work with EXP-008b.
 - **Graphs:** `mapped_results/EXP-009b_selected_features_fusion/`.
+
+## EXP-008b · 2026-11-25 · EXP-008 + LibriSeVoc + ASVspoof 2019 — **BETTER, BUT FAILS ON MODERN VOICE CLONING**
+- **Goal:** cut EXP-008's misses by adding more fake families (LibriSeVoc: 6 neural vocoders on LibriTTS; ASVspoof 2019 LA train) and fixing the operating point.
+- **Data:** 27,472 train / 2,890 val clips, 4 datasets, balanced 50/50 inside each, one random codec copy per clip. Same model and recipe as EXP-008 (4 epochs).
+- **Observed:** val EER 2.4%. In-the-Wild (same 2,000 clips) **84.5%** acc, false alarms 2.1%, misses 28.8%, EER 8.1% (EXP-008: 75.0 / 0.7 / 49.3 / 8.6). ASVspoof 2019 clean 97.5% (EER 2.4%), MP3 16k 93.7% (EER 3.6%), up from 87.3 / 88.5%.
+- **Live test (user, app with new per-file diagnostics):** own real voice now correctly "human" (fixes EXP-007), but **all 3 AI clips from a modern online voice-cloning tool scored "100% human"**.
+- **Diagnostics (occlusion of frequency bands and WavLM layers):** AI and real scores fully overlapped (median log-odds 11–13 for both). The verdict was driven by WavLM's top layer (speech content/prosody, +4 to +6); low "texture" layers voted AI for both classes and were outvoted. No frequency band separated the classes.
+- **Why:** every fake in training came from older TTS/vocoders (2019–2023); modern zero-shot cloning sounds natural at the content level, which the model had learned to equate with "human".
+- **Decision:** add modern TTS/cloning fakes (MLAAD) and give the low layers their own vote → EXP-010.
+- **Graphs:** `mapped_results/EXP-008b_more_data/`.
+
