@@ -73,7 +73,7 @@ Datasets and pretrained weights are **not** included — see the bottom of `requ
 |---|---|
 | 0 Environment / audit | `python experiments/run_phase0_audit.py` |
 | 1 Manifests (+ MP3 cache) | `python experiments/prepare_data.py [--cache train dev]` |
-| 2 GO/NO-GO pilot | `python experiments/run_phase2_pilot.py` (or `run_pilot.bat`) |
+| 2 GO/NO-GO pilot | `python experiments/run_phase2_pilot.py` |
 | 3 Static baseline B | `python experiments/run_training.py --model baseline_b --config config/baseline_rawnet2.yaml` |
 | 4 Δ-Net MVP | `python experiments/run_training.py --model deltanet --config config/delta_net_mvp.yaml` |
 | 5 Ablations | `... --model deltanet --set perturbation=gaussian` (etc.) |
@@ -81,7 +81,14 @@ Datasets and pretrained weights are **not** included — see the bottom of `requ
 | EXP-004 | `python experiments/run_ssl_probe.py` |
 | EXP-004b | `python experiments/run_confidence_stability.py` |
 | EXP-004c | `python experiments/run_double_compression.py` |
-| Graphs | `python experiments/plot_results.py` → `mapped_results/` |
+| EXP-004d | `python experiments/run_exp004d.py` |
+| EXP-005 | `python experiments/run_exp005.py` |
+| EXP-006 | `run_exp006.bat` (or `python experiments/run_exp006.py`) |
+| EXP-007 | `run_exp007.bat` (or `python experiments/run_exp007_inthewild.py`) |
+| EXP-008 | `run_exp008.bat` (data build + fine-tuning + tests) |
+| EXP-009a / 009b | `run_exp009a.bat` / `run_exp009b.bat` |
+
+Each experiment writes its numbers to `results/`; the graphs from every run are kept in `mapped_results/` and the write-ups in `EXPERIMENT_LOG.md`.
 
 ## Repository layout
 ```
@@ -92,8 +99,8 @@ src/training/  weighted CE, training loop
 src/evaluation EER / AUC / bootstrap CI (pure NumPy), Platt calibration
 src/app/       single-file inference engine (no clean reference allowed)
 src/utils/     locked-benchmark guard
-experiments/   phase + experiment scripts, plot_results.py
-mapped_results/ graphs per experiment (EXP-001 … EXP-004c)
+experiments/   one script per experiment (re-runs it end to end)
+mapped_results/ graphs per experiment (EXP-001 … EXP-009b)
 tests/         shape, weight-sharing, quantisation, metric and isolation tests
 ```
 
