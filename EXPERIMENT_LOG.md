@@ -187,3 +187,18 @@
 - **Decision:** add modern TTS/cloning fakes (MLAAD) and give the low layers their own vote → EXP-010.
 - **Graphs:** `mapped_results/EXP-008b_more_data/`.
 
+## EXP-010 · 2026-11-25 · Modern TTS (MLAAD) + 8 fine-tuned layers + "texture" branch — **SUCCESS (deployed)**
+- **Goal:** detect modern voice cloning without losing real-world false-alarm control.
+- **Data:** EXP-008b mix + MLAAD v9 English (143 TTS/cloning systems, 200 clips each). 31 systems held out entirely (incl. ElevenLabs ×2, OpenAI TTS-1 HD, MiniMax 2.6 HD, Qwen3-TTS, VibeVoice); MLAAD fakes paired with unused LibriSeVoc real audiobook speech so "audiobook" is not a shortcut. 39,472 train / 4,090 val clips, codec copies as before.
+- **Model:** WavLM-Base+, top 8 layers fine-tuned (was 4); main branch = learned weights over all 13 layers + attentive pooling + MLP; new texture branch = own weights over layers 0–6 + attentive pooling + MLP; logits summed. 3 epochs, batch 12, 0.13 s/step (~25 min). Balanced (EER) threshold deployed.
+- **Observed (never trained on):**
+  | test | accuracy | real→AI | AI→real | EER |
+  |---|---|---|---|---|
+  | In-the-Wild 2,000 (EXP-008b → EXP-010) | 84.5 → **94.6%** | 2.1 → 7.1% | 28.8 → **3.7%** | 8.1 → **5.1%** |
+  | MLAAD, 31 unseen systems | **98.5%** | 0.1% | 3.0% | 1.2% |
+  | ASVspoof 2019 clean / MP3 16k | 97.9 / 97.0% | 0.4 / 1.2% | 3.8 / 4.8% | 1.8 / 2.8% |
+- **Per unseen system:** 26 of 31 detected ≥ 90% (most 100%); hardest: ElevenLabs Turbo 2.5 87%, ElevenLabs v2 84%, MiniMax 83%, MatchaTTS 75%.
+- **Live test (user-reported, WhatsApp-shared):** 4 AI voices + 4 real voices from different speakers, all judged correctly — first model to pass the live test.
+- **Caveats:** MLAAD held-out reals are audiobooks (same family as training reals) → In-the-Wild is the more honest real-world number. False alarms rose 2.1 → 7.1%.
+- **Decision:** EXP-010 is the deployed model (web app default). Backup for extreme re-compression evaluated separately (EXP-010b, not deployed).
+- **Graphs:** `mapped_results/EXP-010_modern_tts/`.

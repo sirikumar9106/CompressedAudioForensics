@@ -24,9 +24,12 @@ from src.evaluation.calibrator import PlattCalibrator  # noqa: E402
 from src.evaluation.metrics import eer, roc_auc  # noqa: E402
 from src.models.wavlm_detector import WavLMDetector  # noqa: E402
 
-EPOCHS, BATCH, LR_BB, LR_HEAD, MAX_FA = 4, 16, 2e-5, 1e-3, 0.05
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
-LOG = ROOT / "results" / "exp008_log.txt"
+TAG = sys.argv[1] if len(sys.argv) > 1 else "exp008"
+# EXP-010: 8 fine-tuned layers + low-layer "texture" branch (diagnostics showed the top layer alone decides)
+ARCH = {"n_trainable": 8, "low_branch": True} if TAG == "exp010" else {}
+EPOCHS, BATCH, LR_BB, LR_HEAD, MAX_FA = (3, 12, 2e-5, 1e-3, 0.05) if TAG == "exp010" else (4, 16, 2e-5, 1e-3, 0.05)
+LOG = ROOT / "results" / f"{TAG}_log.txt"
 
 
 def log(m):
@@ -88,7 +91,7 @@ def report(name, y, s, cal, thr):
 
 def main():
     LOG.write_text("")
-    rd = lambda s: list(csv.DictReader(open(ROOT / f"data/manifests/exp008_{s}.csv")))
+    rd = lambda s: list(csv.DictReader(open(ROOT / f"data/manifests/{TAG}_{s}.csv")))
     tr, va = rd("train"), rd("val")
     log(f"train {len(tr)} clips, val {len(va)} clips, device {DEV}")
     for ds in sorted({r["dataset"] for r in tr}):
@@ -96,12 +99,12 @@ def main():
     torch.manual_seed(8)
     dl_tr = DataLoader(Mix(tr, True), BATCH, shuffle=True, num_workers=4, drop_last=True, persistent_workers=True)
     dl_va = DataLoader(Mix(va, False), 32, num_workers=4)
-    model = WavLMDetector().to(DEV)
+    model = WavLMDetector(**ARCH).to(DEV)
     opt = torch.optim.AdamW(model.param_groups(LR_BB, LR_HEAD), weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=[LR_BB, LR_HEAD], total_steps=EPOCHS * len(dl_tr), pct_start=0.1)
     scaler = torch.amp.GradScaler(enabled=DEV == "cuda")
     lossf = nn.CrossEntropyLoss()
-    best, out = 1e9, ROOT / "models" / "exp008_wavlm_ft.pt"
+    best, out = 1e9, ROOT / "models" / f"{TAG}_wavlm_ft.pt"
     hist = []
     for ep in range(1, EPOCHS + 1):
         model.train(); model.wavlm.eval()   # keep frozen layers' dropout off
@@ -128,10 +131,14 @@ def main():
     s, y = scores(model, dl_va)
     cal = PlattCalibrator().fit(s, y)
     pv = cal.predict_proba(s)
-    thr = float(np.quantile(pv[y == 1], MAX_FA))       # <= 5% of real validation voices fall below thr
-    torch.save({"state_dict": model.state_dict(), "platt": (cal.a, cal.b), "threshold": thr, "version": "EXP-008"}, out)
-    log(f"operating threshold P(real) >= {thr:.3f}  (max {MAX_FA*100:.0f}% false alarms on validation)")
-    res = {"history": hist, "threshold": thr, "val": report("validation (mixed)", y, s, cal, thr)}
+    thr_strict = float(np.quantile(pv[y == 1], MAX_FA))          # <= 5% of real validation voices fall below
+    ts = np.unique(pv); fa = np.array([(pv[y == 1] < t).mean() for t in ts]); ms = np.array([(pv[y == 0] >= t).mean() for t in ts])
+    thr = float(ts[np.argmin(np.abs(fa - ms))])                  # balanced (EER) operating point -> deployed
+    torch.save({"state_dict": model.state_dict(), "platt": (cal.a, cal.b), "threshold": thr,
+                "threshold_strict": thr_strict, "version": TAG.upper(), "arch": ARCH}, out)
+    log(f"operating points: balanced/EER P(real) >= {thr:.3f} (deployed),  strict <=5% FA: {thr_strict:.3f}")
+    res = {"history": hist, "threshold": thr, "threshold_strict": thr_strict,
+           "val": report("validation (mixed)", y, s, cal, thr)}
 
     log("Test 1: In-the-Wild, same 2,000 clips as EXP-007 (never trained on)")
     from run_exp007a_diagnose import decode
@@ -143,6 +150,7 @@ def main():
         if i % 500 == 0:
             log(f"   {i}/{len(e7)}")
     res["in_the_wild"] = report("In-the-Wild (EXP-007 set)", np.array(Y), np.array(S), cal, thr)
+    res["in_the_wild_strict"] = report("In-the-Wild, strict threshold", np.array(Y), np.array(S), cal, thr_strict)
 
     log("Test 2: ASVspoof 2019 eval, EXP-005 1,000-file set (never trained on)")
     import yaml
@@ -155,7 +163,39 @@ def main():
                      ("ASVspoof 2019 MP3 16k", lambda r: str(cache_path(str(ROOT / "data/cache"), "mp3", "16k", r["file_id"])))]:
         S = np.array([score_file(model, load_audio(fn(r))) for r in test]); Y = np.array([int(r["label"]) for r in test])
         res[name] = report(name, Y, S, cal, thr)
-    json.dump(res, open(ROOT / "results/exp008.json", "w"), indent=2)
+    rw = sorted(p for p in (ROOT / "data/real_world").glob("*") if p.is_file() and p.name != ".gitkeep")
+    if rw:
+        log("Test 3: your own recordings in data/real_world (all assumed REAL)")
+        res["real_world"] = []
+        for f in rw:
+            p_ = float(cal.predict_proba(np.array([score_file(model, decode(f))]))[0])
+            res["real_world"].append({"file": f.name, "p_real": p_, "verdict": "real" if p_ >= thr else "AI"})
+            log(f"  {f.name}: P(real) = {p_:.3f} -> {'REAL' if p_ >= thr else 'AI'}")
+    hp = ROOT / "data/manifests/exp010_test_mlaad_heldout.csv"
+    if hp.exists():
+        log("Test 4: MLAAD English, TTS systems held out from training (unseen generators) vs unused real audiobook speech")
+        ht = list(csv.DictReader(open(hp)))
+        S = np.array([score_file(model, load_audio(r["path"])) for r in ht]); Y = np.array([int(r["label"]) for r in ht])
+        res["mlaad_heldout"] = report("MLAAD held-out systems", Y, S, cal, thr)
+        res["mlaad_heldout_strict"] = report("MLAAD held-out, strict", Y, S, cal, thr_strict)
+        per = {}
+        for r, sc in zip(ht, S):
+            if r["label"] == "0":
+                per.setdefault(r["model"], []).append(float(cal.predict_proba(np.array([sc]))[0] < thr))
+        res["mlaad_heldout_per_system_detected"] = {k: float(np.mean(v)) for k, v in per.items()}
+        for k, v in sorted(per.items()):
+            log(f"     {k:32} AI detected {np.mean(v)*100:5.1f}%  (n={len(v)})")
+    lab = [(p, 1) for p in (ROOT / "data/real_world/real").glob("*") if p.is_file()] + \
+          [(p, 0) for p in (ROOT / "data/real_world/ai").glob("*") if p.is_file()]
+    if lab:
+        log("Test 5: your labelled live-test clips (data/real_world/real and /ai)")
+        res["live_test"] = []
+        for f, l in lab:
+            sc = score_file(model, decode(f)); p_ = float(cal.predict_proba(np.array([sc]))[0])
+            v = "real" if p_ >= thr_strict else "AI"
+            res["live_test"].append({"file": f.name, "truth": "real" if l else "AI", "score": sc, "p_real": p_, "verdict": v})
+            log(f"  [{'REAL' if l else ' AI '}] {f.name[:45]:45} score {sc:6.2f}  P(real) {p_:.3f} -> {v}  {'OK' if (v == 'real') == bool(l) else 'WRONG'}")
+    json.dump(res, open(ROOT / f"results/{TAG}.json", "w"), indent=2)
     log("EXP008_DONE")
 
 

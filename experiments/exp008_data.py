@@ -70,6 +70,35 @@ def librisevoc():
     return rows
 
 
+def asvspoof2019():
+    rows = []
+    for r in csv.DictReader(open(ROOT / "data/manifests/asvspoof2019_train.csv")):
+        rows.append({"path": r["path"], "label": int(r["label"]), "split": bucket("a19" + r["file_id"])})
+    return rows
+
+
+HOLDOUT_FRAC = 0.2   # EXP-010: 20% of MLAAD TTS systems never seen in training (unseen-generator test)
+
+
+def mlaad_models():
+    d = RAW / "mlaad" / "fake" / "en"
+    return sorted(p for p in d.iterdir() if p.is_dir()) if d.exists() else []
+
+
+def heldout(model_name):
+    return int(hashlib.md5(("mlaad" + model_name).encode()).hexdigest(), 16) % 1000 < HOLDOUT_FRAC * 1000
+
+
+def mlaad():
+    rows = []
+    for m in mlaad_models():
+        for p in m.iterdir():
+            if p.suffix.lower() in AUDIO:
+                rows.append({"path": str(p), "label": 0, "model": m.name,
+                             "split": "test" if heldout(m.name) else bucket("ml" + p.name)})
+    return rows
+
+
 def balance(rows, split, cap):
     r = [x for x in rows if x["split"] == split]
     real = [x for x in r if x["label"] == 1]; fake = [x for x in r if x["label"] == 0]
@@ -78,7 +107,10 @@ def balance(rows, split, cap):
 
 
 def main():
+    tag = sys.argv[1] if len(sys.argv) > 1 else "exp008"
     sources = {"asvspoof5": asvspoof5, "fake_or_real": fake_or_real, "librisevoc": librisevoc}
+    if tag in ("exp008b", "exp010"):
+        sources["asvspoof2019"] = asvspoof2019
     out = {"train": [], "val": []}
     for name, fn in sources.items():
         try:
@@ -96,6 +128,33 @@ def main():
                 r["dataset"] = name
             out[split] += b
             print(f"   {split:5}: {len(b)} clips (balanced 50/50)", flush=True)
+    if tag == "exp010":
+        # MLAAD has only fakes: pair them with UNUSED audiobook-style real speech (LibriSeVoc ground truth),
+        # since MLAAD itself is synthesised from audiobooks (M-AILABS) -> no "audiobook = AI" shortcut.
+        fakes = mlaad()
+        used = {r["path"] for sp in out for r in out[sp]}
+        reals = [r for r in librisevoc() if r["label"] == 1 and r["path"] not in used]
+        print(f"mlaad         found {len(fakes)} fakes from {len(mlaad_models())} TTS systems "
+              f"({sum(heldout(m.name) for m in mlaad_models())} held out); {len(reals)} unused real audiobook clips", flush=True)
+        rng.shuffle(reals)
+        for split, cap in (("train", 6000), ("val", 600)):
+            f = [x for x in fakes if x["split"] == split]
+            rs = [x for x in reals if x["split"] == split]
+            n = min(len(f), len(rs), cap)
+            b = rng.sample(f, n) + rs[:n]
+            used |= {x["path"] for x in rs[:n]}
+            for r in b:
+                r["dataset"] = "mlaad"
+            out[split] += b
+            print(f"   {split:5}: {len(b)} clips (balanced 50/50)", flush=True)
+        f = [x for x in fakes if x["split"] == "test"]
+        rs = [x for x in reals if x["path"] not in used]
+        n = min(len(f), len(rs), 1000)
+        test = rng.sample(f, n) + rs[:n]
+        with open(ROOT / "data" / "manifests" / "exp010_test_mlaad_heldout.csv", "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=["path", "label", "model"], extrasaction="ignore")
+            w.writeheader(); w.writerows(test)
+        print(f"   test (held-out TTS systems: {sorted({x['model'] for x in f})}): {len(test)} clips", flush=True)
 
     cache = ROOT / "data" / "cache" / "exp008"
     jobs = []
@@ -122,7 +181,7 @@ def main():
     for split, rows in out.items():
         rows = [r for r in rows if Path(r["codec_path"]).exists()]
         rng.shuffle(rows)
-        p = ROOT / "data" / "manifests" / f"exp008_{split}.csv"
+        p = ROOT / "data" / "manifests" / f"{tag}_{split}.csv"
         with open(p, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=["path", "label", "dataset", "codec_path"], extrasaction="ignore")
             w.writeheader(); w.writerows(rows)
