@@ -14,6 +14,8 @@ import time
 import zipfile
 from pathlib import Path
 
+import os
+
 import requests
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,23 +27,28 @@ JOBS = [
     ("ASVspoof5 protocols", Z5.format("ASVspoof5_protocols.tar.gz"), "ASVspoof5_protocols.tar.gz"),
     ("In-the-Wild", HF.format("mueller91/In-The-Wild", "release_in_the_wild.zip"), "release_in_the_wild.zip"),
     ("ASVspoof5 train part aa", Z5.format("flac_T_aa.tar"), "flac_T_aa.tar"),
-] + [(f"SpoofCeleb part {s}", HF.format("jungjee/spoofceleb", f"spoofceleb.tar.gz{s}"), f"spoofceleb.tar.gz{s}")
-     for s in ("aa", "ab", "ac")]
+] + ([(f"SpoofCeleb part {s}", HF.format("jungjee/spoofceleb", f"spoofceleb.tar.gz{s}"), f"spoofceleb.tar.gz{s}")
+       for s in ("aa", "ab", "ac")] if os.environ.get("HF_TOKEN") else [])  # gated: needs approved HF account + token
 
 
 def download(name, url, fn):
     dst = DL / fn
     done = DL / (fn + ".done")
-    if done.exists():
+    if done.exists() and dst.exists():
         print(f"[skip] {name} already downloaded", flush=True)
         return dst
     pos = dst.stat().st_size if dst.exists() else 0
     for attempt in range(20):
         try:
             h = {"Range": f"bytes={pos}-"} if pos else {}
+            if "huggingface.co" in url and os.environ.get("HF_TOKEN"):
+                h["Authorization"] = f"Bearer {os.environ['HF_TOKEN']}"
             with requests.get(url, headers=h, stream=True, timeout=60, allow_redirects=True) as r:
                 if r.status_code == 416:
                     break
+                if r.status_code in (401, 403):
+                    print(f"[gated] {name}: access denied (HTTP {r.status_code}) - accept the dataset terms and set HF_TOKEN", flush=True)
+                    return None
                 r.raise_for_status()
                 if pos and r.status_code == 200:  # server ignored Range -> restart
                     pos = 0
@@ -59,6 +66,9 @@ def download(name, url, fn):
             print(f"   {name}: interrupted ({e.__class__.__name__}), retrying in 15 s [{attempt+1}/20]", flush=True)
             time.sleep(15)
             pos = dst.stat().st_size if dst.exists() else 0
+    else:
+        print(f"[failed] {name}: giving up after 20 attempts", flush=True)
+        return None
     done.write_text("ok")
     print(f"[done] {name}  ({dst.stat().st_size/1e9:.2f} GB)", flush=True)
     return dst
@@ -117,10 +127,15 @@ def extract_partial_spoofceleb(parts, out):
 def main():
     DL.mkdir(parents=True, exist_ok=True)
     got = {fn: download(name, url, fn) for name, url, fn in JOBS}
-    extract(got["ASVspoof5_protocols.tar.gz"], RAW / "asvspoof5")
-    extract(got["release_in_the_wild.zip"], RAW / "in_the_wild")
-    extract(got["flac_T_aa.tar"], RAW / "asvspoof5")
-    extract_partial_spoofceleb([got[f"spoofceleb.tar.gz{s}"] for s in ("aa", "ab", "ac")], RAW / "spoofceleb")
+    for fn, out in [("ASVspoof5_protocols.tar.gz", RAW / "asvspoof5"), ("release_in_the_wild.zip", RAW / "in_the_wild"),
+                    ("flac_T_aa.tar", RAW / "asvspoof5")]:
+        if got.get(fn):
+            extract(got[fn], out)
+    sc = [got.get(f"spoofceleb.tar.gz{s}") for s in ("aa", "ab", "ac")]
+    if all(sc):
+        extract_partial_spoofceleb(sc, RAW / "spoofceleb")
+    else:
+        print("[skip] SpoofCeleb not available yet (gated; request access on Hugging Face)", flush=True)
     print("ALL_DOWNLOADS_DONE  (archives kept in data/raw/_downloads; delete them once you are happy)", flush=True)
 
 
