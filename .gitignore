@@ -3,7 +3,7 @@ data/raw/
 data/cache/*
 !data/cache/.gitkeep
 data/manifests/*.csv
-models/
+/models/
 *.pth
 *.pt
 *.ckpt

@@ -23,6 +23,20 @@ RAW = ROOT / "data" / "raw"
 DL = RAW / "_downloads"
 Z5 = "https://zenodo.org/records/14498691/files/{}?download=1"
 HF = "https://huggingface.co/datasets/{}/resolve/main/{}"
+FOR = "https://bil.eecs.yorku.ca/share/{}"
+ZPS = "https://zenodo.org/records/5766198/files/{}?download=1"
+ZWF = "https://zenodo.org/records/5642694/files/{}?download=1"
+LIBRISEVOC_GDRIVE_ID = "1NXF9w0YxzVjIAwGm_9Ku7wfLHVbsT7aG"
+# EXP-008 additions: (name, url, filename, extract-to)
+EXTRA = [
+    ("FoR for-norm (train)", FOR.format("for-norm.tar.gz"), "for-norm.tar.gz", RAW / "fake_or_real"),
+    ("FoR for-rerec (train)", FOR.format("for-rerec.tar.gz"), "for-rerec.tar.gz", RAW / "fake_or_real"),
+    ("PartialSpoof protocols (test)", ZPS.format("database_protocols.tar.gz"), "ps_protocols.tar.gz", RAW / "partialspoof"),
+    ("PartialSpoof segment labels (test)", ZPS.format("database_segment_labels_v1.2.tar.gz"), "ps_segment_labels.tar.gz", RAW / "partialspoof"),
+    ("PartialSpoof eval audio (test)", ZPS.format("database_eval.tar.gz"), "ps_eval.tar.gz", RAW / "partialspoof"),
+    ("WaveFake generated audio (test)", ZWF.format("generated_audio.zip"), "wavefake_generated_audio.zip", RAW / "wavefake"),
+    ("LJSpeech real audio for WaveFake (test)", "https://data.keithito.com/data/speech/LJSpeech-1.1.tar.bz2", "LJSpeech-1.1.tar.bz2", RAW / "wavefake"),
+]
 JOBS = [
     ("ASVspoof5 protocols", Z5.format("ASVspoof5_protocols.tar.gz"), "ASVspoof5_protocols.tar.gz"),
     ("In-the-Wild", HF.format("mueller91/In-The-Wild", "release_in_the_wild.zip"), "release_in_the_wild.zip"),
@@ -80,12 +94,12 @@ def extract(path, out):
     if flag.exists():
         return
     print(f"[extract] {path.name} -> {out}", flush=True)
-    if path.suffix == ".zip":
+    if zipfile.is_zipfile(path):
         with zipfile.ZipFile(path) as z:
             z.extractall(out)
     else:
-        with tarfile.open(path) as t:
-            t.extractall(out)
+        with tarfile.open(path) as t:  # auto-detects gz / bz2
+            t.extractall(out, filter="data") if hasattr(tarfile, "data_filter") else t.extractall(out)
     flag.write_text("ok")
 
 
@@ -124,6 +138,30 @@ def extract_partial_spoofceleb(parts, out):
     print(f"[done] SpoofCeleb subset: {n} files", flush=True)
 
 
+def download_librisevoc():
+    dst = DL / "LibriSeVoc.zip"
+    done = DL / "LibriSeVoc.zip.done"
+    if not (done.exists() and dst.exists()):
+        import gdown
+        print("[download] LibriSeVoc from Google Drive (train)", flush=True)
+        gdown.download(id=LIBRISEVOC_GDRIVE_ID, output=str(dst), quiet=False, resume=True)
+        if not dst.exists() or dst.stat().st_size < 1e6:
+            print("[failed] LibriSeVoc: Google Drive refused (quota/permission). Download it manually from the authors' "
+                  "GitHub link and place it at data/raw/_downloads/LibriSeVoc.zip", flush=True)
+            return
+        done.write_text("ok")
+    out = RAW / "librisevoc"
+    flag = out / ".extracted"
+    if not flag.exists():
+        out.mkdir(parents=True, exist_ok=True)
+        print("[extract] LibriSeVoc", flush=True)
+        if zipfile.is_zipfile(dst):
+            zipfile.ZipFile(dst).extractall(out)
+        else:
+            tarfile.open(dst).extractall(out)
+        flag.write_text("ok")
+
+
 def main():
     DL.mkdir(parents=True, exist_ok=True)
     got = {fn: download(name, url, fn) for name, url, fn in JOBS}
@@ -136,6 +174,17 @@ def main():
         extract_partial_spoofceleb(sc, RAW / "spoofceleb")
     else:
         print("[skip] SpoofCeleb not available yet (gated; request access on Hugging Face)", flush=True)
+    # ---- EXP-008 datasets: training data first, test-only data last ----
+    order = EXTRA[:2]
+    for name, url, fn, out in order:
+        f = download(name, url, fn)
+        if f:
+            extract(f, out)
+    download_librisevoc()
+    for name, url, fn, out in EXTRA[2:]:
+        f = download(name, url, fn)
+        if f:
+            extract(f, out)
     print("ALL_DOWNLOADS_DONE  (archives kept in data/raw/_downloads; delete them once you are happy)", flush=True)
 
 
