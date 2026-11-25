@@ -4,7 +4,7 @@ cd /d "%~dp0"
 set PYTHONIOENCODING=utf-8
 set HF_HUB_DISABLE_SYMLINKS_WARNING=1
 echo === Checking web server packages ===
-".venv\Scripts\python.exe" -m pip install -q fastapi "uvicorn[standard]" python-multipart joblib
+".venv\Scripts\python.exe" -m pip install -q fastapi "uvicorn[standard]" python-multipart joblib matplotlib
 if not exist models\compressed_forensics_F.joblib (
   echo === Building deployment model from EXP-005 features ===
   ".venv\Scripts\python.exe" -m src.app.model_store

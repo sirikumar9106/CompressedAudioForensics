@@ -50,10 +50,31 @@ STATE = {}
 
 @app.on_event("startup")
 def _load():
-    from transformers import WavLMModel
-    STATE["wavlm"] = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").to(DEVICE).eval()
-    STATE["art"] = model_store.load()
+    ft = Path(__file__).resolve().parents[2] / "models" / os.environ.get("CAF_MODEL", "exp010_wavlm_ft.pt")
+    if ft.exists():   # fine-tuned real-world detector (EXP-008b): one model for every bitrate
+        from src.models.wavlm_detector import WavLMDetector
+        ck = torch.load(ft, map_location="cpu")
+        m = WavLMDetector(**ck.get("arch", {})); m.load_state_dict(ck["state_dict"]); STATE["ft"] = m.to(DEVICE).eval()
+        # EXP-008b: strict point was best on In-the-Wild; EXP-010 (has "arch"): balanced point is best there
+        thr = ck["threshold"] if ck.get("arch") else ck.get("threshold_strict", ck["threshold"])
+        STATE["art"] = {"version": ck.get("version", ft.stem), "platt": ck["platt"],
+                        "shift": math.log(thr / (1 - thr))}
+    else:            # lab model F (frozen WavLM + probe)
+        from transformers import WavLMModel
+        STATE["wavlm"] = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").to(DEVICE).eval()
+        STATE["art"] = model_store.load()
     print(f"[ready] device={DEVICE}  model={STATE['art']['version']}", flush=True)
+
+
+@torch.no_grad()
+def ft_scores(ws):
+    m, out = STATE["ft"], []
+    for i in range(0, len(ws), 8):
+        t = torch.stack([torch.from_numpy(peak_normalize(w.astype(np.float32))) for w in ws[i:i + 8]]).to(DEVICE)
+        with torch.autocast(DEVICE, dtype=torch.float16, enabled=DEVICE == "cuda"):
+            lg = m(t).float()
+        out.append((lg[:, 1] - lg[:, 0]).cpu().numpy())
+    return np.concatenate(out)
 
 
 def probe_file(path):
@@ -134,7 +155,7 @@ def density(vals, grid, bw):
 
 
 @app.post("/api/analyze")
-async def analyze(file: UploadFile = File(...), platform: str = Form("unknown")):
+async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"), truth: str = Form("unknown")):
     if "art" not in STATE:
         raise HTTPException(503, "Model is still loading, try again in a moment.")
     tmpdir = tempfile.mkdtemp(prefix="caf_")
@@ -151,11 +172,16 @@ async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"))
 
     art = STATE["art"]
     calib, why, from_header = choose_calibration(platform, meta)
-    probe = art["probe_U"] if calib == "unknown" else art["probe_F"]
-    a, b = art["cal"][calib]
     W = windows(x)
-    scores = probe.decision_function(embed([w for _, _, w in W]))
-    probs = 1 / (1 + np.exp(-(a * scores + b)))
+    if "ft" in STATE:   # P(real) re-centred so the deployed threshold sits at 0.5
+        a, b = art["platt"]
+        scores = ft_scores([w for _, _, w in W])
+        probs = 1 / (1 + np.exp(-(a * scores + b - art["shift"])))
+    else:
+        probe = art["probe_U"] if calib == "unknown" else art["probe_F"]
+        a, b = art["cal"][calib]
+        scores = probe.decision_function(embed([w for _, _, w in W]))
+        probs = 1 / (1 + np.exp(-(a * scores + b)))
 
     rms = np.array([float(np.sqrt(np.mean(w ** 2))) for _, _, w in W])
     speech = rms >= 0.1 * rms.max() if rms.max() > 0 else np.ones(len(W), bool)
@@ -185,26 +211,42 @@ async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"))
         verdict, level = "Likely AI-generated voice", "fake"
 
     notes = []
-    if calib == "8k":
+    if "ft" in STATE:
+        notes.append("Model EXP-010 (real-world speech + 140 modern TTS/voice-cloning systems): on the In-the-Wild benchmark "
+                     "it calls about 7% of real voices AI and misses about 4% of AI voices; on 31 cloning tools it never "
+                     "saw in training it catches 75-100% of clips (ElevenLabs about 85%, MiniMax about 83%).")
+    elif calib == "8k":
         notes.append("Very low bitrate (about 8 kbps): measured accuracy about 95%, lower than at higher bitrates.")
-    if calib == "unknown":
+    if calib == "unknown" and "ft" not in STATE:
         notes.append("General model without a bitrate hint: measured accuracy 95-97% down to 16 kbps but about 78% at 8 kbps. "
                      "Choose the source app if you know it.")
     if len(W) > 1 and spread > 0.3:
         notes.append("Confidence varies strongly over time; inspect the timeline in View analytics.")
 
-    ref = art["ref"][calib]
-    allv = np.concatenate([ref["real"], ref["fake"], [s_med]])
-    lo, hi = float(np.percentile(allv, 1)) - 1, float(np.percentile(allv, 99)) + 1
-    grid = np.linspace(lo, hi, 160)
-    bw = max((hi - lo) / 40, 1e-3)
+    ref = art.get("ref", {}).get(calib)
+    if ref is not None:
+        allv = np.concatenate([ref["real"], ref["fake"], [s_med]])
+        lo, hi = float(np.percentile(allv, 1)) - 1, float(np.percentile(allv, 99)) + 1
+        grid = np.linspace(lo, hi, 160)
+        bw = max((hi - lo) / 40, 1e-3)
     advice = ["Automated detection is probabilistic. Treat this as an advisory, not proof."]
     if level != "real":
         advice = ["Do not send money, codes or personal details based on this audio.",
                   "Call the person back on a number you already know.",
                   "Ask something only the real person would know."] + advice
 
+    diag = None
+    if "ft" in STATE:
+        try:
+            from src.app import diagnostics
+            t = truth if truth in ("real", "ai") else "unknown"
+            diag = diagnostics.run(STATE["ft"], x, W, speech, scores, DEVICE,
+                                   Path(__file__).resolve().parents[2] / "results" / "diagnostics", file.filename or "upload", t)
+        except Exception as e:  # diagnostics must never break the verdict
+            print("[diagnostics failed]", repr(e), flush=True)
+
     return JSONResponse({
+        "diagnostics": diag,
         "verdict": verdict, "level": level,
         "p_real": round(p_med, 4), "p_fake": round(1 - p_med, 4),
         "margin": round(abs(p_med - 0.5) * 2, 3),
@@ -216,7 +258,7 @@ async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"))
         "suspicious_span": [round(best_span[0], 2), round(best_span[1], 2)] if best >= 2 else None,
         "reference": {"grid": grid.round(3).tolist(), "real": density(ref["real"], grid, bw),
                       "fake": density(ref["fake"], grid, bw), "file_score": round(s_med, 3),
-                      "threshold": round(-b / a, 3) if a else 0.0},
+                      "threshold": round(-b / a, 3) if a else 0.0} if ref is not None else None,
         "notes": notes, "advice": advice, "model": art["version"],
     })
 

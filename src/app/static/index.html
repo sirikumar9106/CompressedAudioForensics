@@ -189,6 +189,9 @@
       </div>
       <div class="hint" id="selHint">The app picks the matching compression profile. If the file header states its codec and bitrate, that is used instead.</div>
 
+      <label class="hint" style="display:flex;align-items:center;gap:10px;margin:-4px 0 14px">Testing? What is this file really:
+        <select id="truth" style="background:#0e131c;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit">
+          <option value="unknown">Not sure</option><option value="real">Real voice</option><option value="ai">AI-generated</option></select></label>
       <button class="btn" id="go" disabled>Check authenticity</button>
       <div class="err" id="err"></div>
     </section>
@@ -244,9 +247,21 @@
         <div class="hint" id="anHint" style="margin-top:16px"></div>
       </div></div>
     </section>
+
+    <!-- 4 diagnostics -->
+    <section class="card span2 acc" id="cardDg" style="display:none">
+      <div class="acc-head" id="dgHead">
+        <h2><span class="n">04</span>Diagnostics — which factors drive the score</h2>
+        <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9bbd6" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="acc-body"><div>
+        <div class="charts" id="dgGrid"></div>
+        <div class="hint" id="dgHint" style="margin-top:16px"></div>
+      </div></div>
+    </section>
   </div>
 
-  <footer>Research prototype · frozen WavLM-Base+ features, RawBoost-augmented probe, bitrate-aware calibration (method F) · audio is processed in memory and deleted immediately · results are probabilistic and are not legal evidence</footer>
+  <footer>Research prototype · WavLM-Base+ partially fine-tuned on multi-dataset real-world speech (EXP-008b) · audio is processed in memory and deleted immediately · results are probabilistic and are not legal evidence</footer>
 </div>
 <div class="tip" id="tip"></div>
 
@@ -300,7 +315,7 @@ function setFile(f){
 $("#go").onclick=async()=>{
   if(!file) return; const b=$("#go"); b.disabled=true; b.innerHTML='<span class="spin"></span>Analysing…';
   $("#err").style.display="none";
-  const fd=new FormData(); fd.append("file",file); fd.append("platform",platform);
+  const fd=new FormData(); fd.append("file",file); fd.append("platform",platform); fd.append("truth",$("#truth").value);
   try{
     const r=await fetch("/api/analyze",{method:"POST",body:fd});
     const j=await r.json(); if(!r.ok) throw new Error(j.detail||"Analysis failed");
@@ -328,6 +343,11 @@ function show(j){
      + (j.notes.length?"<br>"+j.notes.join("<br>"):"");
   $("#adv").innerHTML=j.advice.map(a=>`<div>${a}</div>`).join("");
   chartTimeline(j); chartDist(j);
+  if(j.diagnostics){
+    $("#dgGrid").innerHTML=j.diagnostics.images.map(d=>`<div class="chart"><h4>${d.title}</h4><div class="cap">${d.caption}</div><img src="data:image/png;base64,${d.png}" style="width:100%;border-radius:8px;display:block"></div>`).join("");
+    $("#dgHint").textContent=`Saved with summary.json to ${j.diagnostics.folder} — compare a real and an AI file side by side.`;
+    $("#cardDg").style.display=""; $("#cardDg").classList.add("open");
+  } else { $("#cardDg").style.display="none"; }
   $("#anHint").textContent=`Model ${j.model}. Final score = median over speech windows (${j.windows.filter(w=>w.speech).length} of ${j.windows.length}).`;
   $("#cardAn").classList.add("open");
   setTimeout(()=>$("#cardAn").scrollIntoView({behavior:"smooth",block:"start"}),650);
@@ -335,6 +355,7 @@ function show(j){
 
 // analytics accordion
 $("#accHead").onclick=()=>$("#cardAn").classList.toggle("open");
+$("#dgHead").onclick=()=>$("#cardDg").classList.toggle("open");
 
 // charts (hand-drawn SVG)
 const W=520,H=230,P={l:42,r:14,t:14,b:34};
@@ -368,6 +389,7 @@ function chartTimeline(j){
   hookTips("#c1"); animatePath("#c1 .draw");
 }
 function chartDist(j){
+  if(!j.reference){ $("#c2").innerHTML='<div class="cap" style="padding:24px 0">Reference distributions are not available for this model yet.</div>'; return; }
   const R=j.reference, g=R.grid, mx=Math.max(...R.real,...R.fake);
   sx=v=>P.l+((v-g[0])/(g[g.length-1]-g[0]))*(W-P.l-P.r); sy=v=>P.t+(1-v/mx)*(H-P.t-P.b);
   const path=arr=>arr.map((d,i)=>(i?"L":"M")+sx(g[i]).toFixed(1)+","+sy(d).toFixed(1)).join("");
