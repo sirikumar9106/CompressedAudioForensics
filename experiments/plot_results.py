@@ -282,6 +282,49 @@ def exp006(d, out):
         save(fig, out, nm)
 
 
+def exp007(summ, rows, out):
+    y = np.array([int(r["label"]) for r in rows])
+    keys = [("p_clean", "As deployed\n(clean profile)"), ("p_unknown", "'I don't know'\nmode"), ("p_clean_trimmed", "Clean profile,\nsilence trimmed")]
+    fig, ax = plt.subplots(figsize=(8, 4))
+    x = np.arange(len(keys))
+    fa = [summ[k]["false_alarm_real_called_AI"] * 100 for k, _ in keys]; ms = [summ[k]["miss_AI_called_real"] * 100 for k, _ in keys]
+    b1 = ax.bar(x - .2, fa, .38, color=C[1], label="False alarms: real voices called AI")
+    b2 = ax.bar(x + .2, ms, .38, color=C[0], label="Misses: AI voices called real")
+    ax.bar_label(b1, [f"{v:.1f}%" for v in fa], fontsize=8, color=INK2); ax.bar_label(b2, [f"{v:.1f}%" for v in ms], fontsize=8, color=INK2)
+    ax.set_xticks(x, [n for _, n in keys]); ax.set_ylim(0, 100); ax.set_ylabel("Error rate (%)")
+    ax.set_title("EXP-007: method F on In-the-Wild (2,000 unseen real-world clips)")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=2, fontsize=8)
+    save(fig, out, "1_error_types.png")
+    p = np.array([float(r["p_clean"]) for r in rows])
+    fig, ax = plt.subplots(figsize=(8, 4))
+    bins = np.linspace(0, 1, 26)
+    ax.hist(p[y == 1], bins, color=C[2], alpha=.75, label="Real voices (1,000)")
+    ax.hist(p[y == 0], bins, color=C[1], alpha=.6, label="AI voices (1,000)")
+    ax.axvline(.5, color=INK2, ls="--", lw=1); ax.text(.51, ax.get_ylim()[1] * .9, "decision line", fontsize=8, color=INK2)
+    ax.set_yscale("log"); ax.set_xlabel("P(real) from the deployed model"); ax.set_ylabel("Clips (log scale)")
+    ax.set_title(f"EXP-007: real voices are pushed below 0.5 — AUC {summ['p_clean']['auc']:.3f} but calibration fails")
+    ax.legend(fontsize=8)
+    save(fig, out, "2_score_distributions.png")
+    s = np.array([float(r["sec"]) for r in rows])
+    buckets = [(0, 3), (3, 6), (6, 10), (10, 99)]
+    lab = ["< 3 s", "3–6 s", "6–10 s", "> 10 s"]
+    vals, ns = [], []
+    for lo, hi in buckets:
+        m = (s >= lo) & (s < hi) & (y == 1); ns.append(int(m.sum())); vals.append((p[m] < .5).mean() * 100 if m.sum() else 0)
+    fig, ax = plt.subplots(figsize=(7, 4))
+    b = ax.bar(lab, vals, .6, color=C[1]); ax.bar_label(b, [f"{v:.0f}%\n(n={n})" for v, n in zip(vals, ns)], fontsize=8, color=INK2)
+    ax.set_ylim(0, 110); ax.set_ylabel("Real voices called AI (%)"); ax.set_xlabel("Clip duration")
+    ax.set_title("EXP-007: false alarms on real voices by clip length")
+    save(fig, out, "3_false_alarms_by_duration.png")
+    fig, ax = plt.subplots(figsize=(7, 4))
+    names = ["ASVspoof 2019 eval\n(EXP-005, clean)", "In-the-Wild\n(EXP-007, clean)"]
+    acc = [98.9, summ["p_clean"]["accuracy"] * 100]
+    b = ax.bar(names, acc, .5, color=[C[2], C[1]]); ax.bar_label(b, [f"{v:.1f}%" for v in acc], fontsize=9, color=INK2)
+    ax.set_ylim(0, 105); ax.set_ylabel("Accuracy (%)"); ax.axhline(50, color=INK2, ls=":", lw=1)
+    ax.set_title("EXP-007: same model, lab data vs real-world data")
+    save(fig, out, "4_lab_vs_real_world.png")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
@@ -328,6 +371,9 @@ def main():
         save(fig, o5, "5_overall_ranking.png")
     if (R / "exp006.json").exists():
         exp006(json.load(open(R / "exp006.json")), O / "EXP-006_real_world_robustness")
+    if (R / "exp007.json").exists():
+        import csv as _c
+        exp007(json.load(open(R / "exp007.json")), list(_c.DictReader(open(R / "exp007_files.csv"))), O / "EXP-007_in_the_wild_baseline")
     print("plots written to", O)
 
 

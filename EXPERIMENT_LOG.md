@@ -120,3 +120,16 @@
 - **(3) Unseen codecs (F + matching dropdown):** Opus 99.0 / 99.1 / 98.9 / **95.3** (64/32/16/8k); AAC 98.8 / 98.7 / 98.3 (64/32/16k). All ≥ 95%, beats A everywhere; "Not sure" ≥ 96% except Opus 8k (87.7, FA 25%).
 - **Findings:** F generalises to WhatsApp-type Opus without retraining. The only serious risk is a large dropdown error, worst when the user picks 8k for good-quality audio (fakes pass as real).
 - **Decision:** keep F. App: default dropdown = "Not sure"; warn on 8k choice; add automatic bandwidth check to flag dropdown choices inconsistent with the audio (next step).
+
+## EXP-007 · 2026-11-25 · Real-world baseline: method F on In-the-Wild — **FAILS (83.8% false alarms)**
+- **Goal:** measure the deployed model (exact app pipeline) on real-world audio it never saw, after a live recording of a real voice was classified as AI.
+- **Data:** In-the-Wild (Müller et al. 2022; real + deepfake speech of 58 public figures from online videos), random balanced 1,000 real + 1,000 fake; clips 0.6–24.7 s (median 3.4 s). Test only.
+- **Observed:**
+  | variant | accuracy | false alarms (real→AI) | misses (AI→real) | AUC | EER |
+  |---|---|---|---|---|---|
+  | clean profile (as deployed) | 58.1% | **83.8%** | 0.0% | 0.900 | 16.6% |
+  | "I don't know" mode | 66.5% | 62.6% | 4.4% | 0.733 | 32.0% |
+  | clean profile, silence trimmed | 54.3% | 91.4% | 0.0% | 0.895 | 16.8% |
+- **Findings:** model flags almost everything as AI (mean P(real) on real voices 0.18). Ranking partly survives (AUC 0.90) but the decision boundary is useless out of domain. Trimming silence makes it worse (89 real clips flip to AI) → silence is one learned cue, but not the main one. False alarms are high at every clip length (78–94%).
+- **Why:** "real" was learned from one studio corpus (ASVspoof 2019 / VCTK, 600 clips). Any other microphone, room or speaking style falls on the "not real" side. ASVspoof accuracy (98.9%) does not transfer.
+- **Decision:** current design is not deployable. Next: retrain with diverse real-world bona fide data (ASVspoof 5 crowdsourced; SpoofCeleb when access is granted), silence-stripping + loudness normalisation, shared corruptions; In-the-Wild stays test-only.
