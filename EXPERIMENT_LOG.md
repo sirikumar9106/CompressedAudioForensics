@@ -133,3 +133,16 @@
 - **Findings:** model flags almost everything as AI (mean P(real) on real voices 0.18). Ranking partly survives (AUC 0.90) but the decision boundary is useless out of domain. Trimming silence makes it worse (89 real clips flip to AI) → silence is one learned cue, but not the main one. False alarms are high at every clip length (78–94%).
 - **Why:** "real" was learned from one studio corpus (ASVspoof 2019 / VCTK, 600 clips). Any other microphone, room or speaking style falls on the "not real" side. ASVspoof accuracy (98.9%) does not transfer.
 - **Decision:** current design is not deployable. Next: retrain with diverse real-world bona fide data (ASVspoof 5 crowdsourced; SpoofCeleb when access is granted), silence-stripping + loudness normalisation, shared corruptions; In-the-Wild stays test-only.
+
+## EXP-008 · 2026-11-25 · Multi-dataset fine-tuning (ASVspoof 5 + Fake-or-Real) — **FALSE-ALARM PROBLEM SOLVED; threshold too strict**
+- **Goal:** fix EXP-007 (83.8% of real voices called AI) by training on diverse real speech, avoiding EXP-001..007 pitfalls.
+- **Data (train/val, balanced 50/50 inside each dataset, speaker/file-disjoint):** ASVspoof 5 train part aa (crowdsourced, 400 speakers) 6,872 / 730; Fake-or-Real for-norm + for-rerec 8,000 / 800. One random codec copy per clip (MP3/Opus/AAC 8–64 kbps, same for both classes). Silence untouched; 4 s random crops. LibriSeVoc still downloading → EXP-008b.
+- **Model:** WavLM-Base+, top 4 transformer layers fine-tuned + learned weights over all 13 layers + attentive statistics pooling + MLP. 4 epochs, AdamW (2e-5 / 1e-3), fp16, RTX 5050 (0.44 s/step, ~30 min). Threshold set on validation for ≤ 5% false alarms (P(real) ≥ 0.876).
+- **Observed (never-trained-on test sets):**
+  | test set | accuracy | false alarms (real→AI) | misses (AI→real) | AUC | EER |
+  |---|---|---|---|---|---|
+  | In-the-Wild, same 2,000 clips as EXP-007 | 75.0% | **0.7%** (was 83.8%) | 49.3% (was 0.0%) | **0.971** (was 0.900) | **8.6%** (was 16.6%) |
+  | ASVspoof 2019 eval clean (1,000) | 87.3% | 0.2% | 25.2% | 0.982 | 6.5% |
+  | ASVspoof 2019 eval MP3 16 kbps | 88.5% | 2.4% | 20.6% | 0.963 | 10.7% |
+- **Findings:** real-world false alarms collapse 83.8% → 0.7% and ranking improves (EER halves 16.6% → 8.6%), so diverse real speech fixed the core failure. But the threshold fitted on in-domain validation is now too strict out of domain: half of In-the-Wild fakes pass as real. Lab performance on ASVspoof 2019 drops vs method F (EER 1% → 6.5%), expected since 2019 is no longer in training.
+- **Decision:** keep the EXP-008 model as the new base. Next: EXP-008b adds LibriSeVoc (+ ASVspoof 2019 LA train) and fixes the operating point (calibrate on a mixed held-out set incl. compressed real-world-like speech, report EER-threshold results), then re-test on In-the-Wild + the user's own recordings.

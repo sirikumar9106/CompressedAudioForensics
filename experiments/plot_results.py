@@ -325,6 +325,52 @@ def exp007(summ, rows, out):
     save(fig, out, "4_lab_vs_real_world.png")
 
 
+def exp008(d, e7, out):
+    fig, ax = plt.subplots(figsize=(8.5, 4))
+    labs = ["False alarms\n(real called AI)", "Misses\n(AI called real)", "EER"]
+    b7 = [e7["p_clean"]["false_alarm_real_called_AI"] * 100, e7["p_clean"]["miss_AI_called_real"] * 100, e7["p_clean"]["eer"] * 100]
+    i8 = d["in_the_wild"]
+    b8 = [i8["false_alarm_real_called_AI"] * 100, i8["miss_AI_called_real"] * 100, i8["eer"] * 100]
+    x = np.arange(3)
+    r1 = ax.bar(x - .2, b7, .38, color=C[1], label="EXP-007: method F (ASVspoof 2019 only)")
+    r2 = ax.bar(x + .2, b8, .38, color=C[0], label="EXP-008: fine-tuned on ASVspoof 5 + Fake-or-Real")
+    ax.bar_label(r1, [f"{v:.1f}%" for v in b7], fontsize=8, color=INK2); ax.bar_label(r2, [f"{v:.1f}%" for v in b8], fontsize=8, color=INK2)
+    ax.set_xticks(x, labs); ax.set_ylim(0, 100); ax.set_ylabel("%  (lower is better)")
+    ax.set_title("EXP-008 vs EXP-007 on the same 2,000 In-the-Wild clips")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=1, fontsize=8)
+    save(fig, out, "1_in_the_wild_before_after.png")
+    h = d["history"]; ep = [r["epoch"] for r in h]
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 3.6))
+    a1.plot(ep, [r["train_loss"] for r in h], color=C[0], lw=2, marker="o", ms=5); a1.set_title("Training loss"); a1.set_xlabel("Epoch")
+    a2.plot(ep, [r["val_eer"] * 100 for r in h], color=C[2], lw=2, marker="o", ms=5); a2.set_title("Validation EER (%)"); a2.set_xlabel("Epoch")
+    for a in (a1, a2):
+        a.set_xticks(ep)
+    fig.suptitle("EXP-008: fine-tuning curve (top 4 WavLM layers + attentive pooling)", fontsize=11, y=1.03)
+    save(fig, out, "2_training_curve.png")
+    sets = [("val", "Validation\n(ASVspoof5+FoR)"), ("in_the_wild", "In-the-Wild"),
+            ("ASVspoof 2019 clean", "ASVspoof 2019\nclean"), ("ASVspoof 2019 MP3 16k", "ASVspoof 2019\nMP3 16k")]
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4))
+    for a, key, t, sc in [(a1, "auc", "AUC (ranking, higher is better)", 1), (a2, "eer", "EER % (lower is better)", 100)]:
+        v = [d[k][key] * sc for k, _ in sets]
+        bb = a.bar([n for _, n in sets], v, .55, color=[C[2], C[0], C[3], C[3]])
+        a.bar_label(bb, [f"{x:.3f}" if sc == 1 else f"{x:.1f}" for x in v], fontsize=8, color=INK2); a.set_title(t, fontsize=10)
+        a.tick_params(axis="x", labelsize=8)
+    a1.set_ylim(0.9, 1.0)
+    fig.suptitle("EXP-008: generalisation to datasets never used in training", fontsize=11, y=1.03)
+    save(fig, out, "3_generalisation.png")
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ks = ["val", "in_the_wild", "ASVspoof 2019 clean", "ASVspoof 2019 MP3 16k"]
+    nm = ["Validation", "In-the-Wild", "ASV19 clean", "ASV19 16k"]
+    fa = [d[k]["false_alarm_real_called_AI"] * 100 for k in ks]; ms = [d[k]["miss_AI_called_real"] * 100 for k in ks]
+    x = np.arange(len(ks))
+    r1 = ax.bar(x - .2, fa, .38, color=C[1], label="False alarms (real → AI)"); r2 = ax.bar(x + .2, ms, .38, color=C[0], label="Misses (AI → real)")
+    ax.bar_label(r1, [f"{v:.1f}" for v in fa], fontsize=8, color=INK2); ax.bar_label(r2, [f"{v:.1f}" for v in ms], fontsize=8, color=INK2)
+    ax.set_xticks(x, nm); ax.set_ylabel("%"); ax.set_ylim(0, 60)
+    ax.set_title(f"EXP-008: strict threshold (P(real) ≥ {d['threshold']:.2f}) trades false alarms for misses")
+    ax.legend(fontsize=8)
+    save(fig, out, "4_error_tradeoff.png")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
@@ -374,6 +420,8 @@ def main():
     if (R / "exp007.json").exists():
         import csv as _c
         exp007(json.load(open(R / "exp007.json")), list(_c.DictReader(open(R / "exp007_files.csv"))), O / "EXP-007_in_the_wild_baseline")
+    if (R / "exp008.json").exists() and (R / "exp007.json").exists():
+        exp008(json.load(open(R / "exp008.json")), json.load(open(R / "exp007.json")), O / "EXP-008_multi_dataset_finetune")
     print("plots written to", O)
 
 
