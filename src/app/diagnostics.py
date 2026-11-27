@@ -1,29 +1,19 @@
 """Per-file diagnostics for the fine-tuned WavLM detector (EXP-008b onward).
 
-Six pictures, all in the model's own score units (log-odds of "real"; +ve = sounds human):
+Six interactive charts (data only), in the model's own score units (log-odds of "real"; +ve = sounds human):
   1 spectrogram + per-window score        2 time x frequency-band occlusion map
   3 frequency-band importance (mean)      4 WavLM layer importance (+ learned layer weights)
   5 where the model listens (attention)   6 long-term spectrum + simple acoustic measurements
 Occlusion = remove one 1 kHz band (or one layer) and measure how much the score drops.
 A positive bar means "this part makes the file look HUMAN to the model".
-Images are returned to the web page only (base64); nothing is written to disk.
+The arrays go to the web page as JSON for drawing; nothing is written to disk.
 """
-import base64, io
-
 import numpy as np
 import torch
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
 SR = 16000
 BANDS = [(i * 1000, (i + 1) * 1000) for i in range(8)]
 MAX_WIN = 30                       # diagnose at most 30 windows (~60 s)
-BG, FG, MUT, GRID = "#0e131c", "#dbe3ef", "#8793a6", "#232b38"
-plt.rcParams.update({"figure.facecolor": BG, "axes.facecolor": BG, "savefig.facecolor": BG, "text.color": FG,
-                     "axes.labelcolor": FG, "xtick.color": MUT, "ytick.color": MUT, "axes.edgecolor": GRID,
-                     "axes.grid": True, "grid.color": GRID, "font.size": 10, "axes.spines.top": False,
-                     "axes.spines.right": False})
 
 
 def _norm(w):
@@ -53,12 +43,6 @@ def _band_stop(x, lo, hi):
     return np.fft.irfft(X, len(x))
 
 
-def _png(fig):
-    fig.tight_layout()
-    buf = io.BytesIO(); fig.savefig(buf, format="png", dpi=110); plt.close(fig)
-    return base64.b64encode(buf.getvalue()).decode()
-
-
 def _quiet(att, env):
     n = min(len(att), len(env)); a = np.nan_to_num(att[:n]); e = env[:n]
     return float(100 * (a * (e < .1 * e.max())).sum() / max(a.sum(), 1e-9))
@@ -79,6 +63,16 @@ def acoustic(x):
             "energy_below_300hz_pct": float(100 * Sv[:, f < 300].sum() / Sv.sum()),
             "spectral_flatness": float(flat.mean()), "spectral_centroid_hz": float(cen.mean()),
             "centroid_variability_hz": float(cen.std())}
+
+
+def _thin(a, n):
+    """Keep at most n evenly spaced points."""
+    a = np.asarray(a)
+    return a if len(a) <= n else a[np.linspace(0, len(a) - 1, n).astype(int)]
+
+
+def _r(a, d=3):
+    return np.round(np.nan_to_num(np.asarray(a, float)), d).tolist()
 
 
 def run(model, x, W, speech, scores, dev):
@@ -106,74 +100,36 @@ def run(model, x, W, speech, scores, dev):
             sc, _ = _head(model, _states(model, [_band_stop(w, lo, hi) for w in chunk], dev), lw)
             band_d[i:i + len(chunk), bi] = base - sc
     att_t = np.where(C_att > 0, T_att / np.maximum(C_att, 1), np.nan)
+    wts = torch.softmax(lw, 0).cpu().numpy()
+    return pack(x, W, speech, scores, band_d, layer_d, wts, att_t)
 
+
+def pack(x, W, speech, scores, band_d, layer_d, wts, att_t):
+    """Turn the measurements into compact JSON for the charts."""
     dur = W[-1][1]; xs = x[: int(dur * SR)]
-    centres = np.array([(a + b) / 2 for a, b, _ in W])
-    imgs = []
+    centres = [(a + b) / 2 for a, b, _ in W]
     use = speech if speech.any() else np.ones(len(W), bool)
 
-    # 1 spectrogram + score
-    fig, ax = plt.subplots(figsize=(9, 3.6))
-    ax.specgram(xs + 1e-7, NFFT=512, Fs=SR, noverlap=352, cmap="magma", vmin=-130)
-    ax.set_ylim(0, 8000); ax.set_ylabel("frequency (Hz)"); ax.set_xlabel("time (s)"); ax.grid(False)
-    a2 = ax.twinx(); a2.plot(centres, scores, color="#7fd1ff", lw=2, marker="o", ms=4)
-    a2.axhline(0, color="#7fd1ff", ls="--", lw=1, alpha=.6); a2.set_ylabel("score (+ human / − AI)", color="#7fd1ff"); a2.grid(False)
-    ax.set_title("1 · Spectrogram with the model's score per 4 s window")
-    imgs.append(("Spectrogram + score", "What the audio contains over time, and how human each window sounded to the model (above the dashed line = human).", _png(fig)))
+    fr = xs[: len(xs) // 256 * 256].reshape(-1, 256)              # spectrogram: 16 ms frames, 64 bands to 8 kHz
+    S = 10 * np.log10(np.abs(np.fft.rfft(fr * np.hanning(256), axis=1))[:, :128] ** 2 + 1e-10)
+    S = S.reshape(len(S), 64, 2).mean(2)
+    cols = min(len(S), 180)
+    S = np.array([c.mean(0) for c in np.array_split(S, cols)])
+    hi = np.percentile(S, 99); S = np.clip((S - (hi - 70)) / 70, 0, 1)
 
-    # 2 time x band occlusion
-    lim = max(np.abs(band_d).max(), 1e-3)
-    fig, ax = plt.subplots(figsize=(9, 3.6))
-    im = ax.imshow(band_d.T, aspect="auto", origin="lower", cmap="RdBu", vmin=-lim, vmax=lim,
-                   extent=[0, len(W), 0, 8])
-    ax.set_yticks(np.arange(8) + .5, [f"{lo//1000}–{hi//1000} kHz" for lo, hi in BANDS], fontsize=8)
-    ax.set_xticks(np.arange(len(W)) + .5, [f"{c:.0f}" for c in centres], fontsize=7); ax.set_xlabel("window centre (s)"); ax.grid(False)
-    fig.colorbar(im, ax=ax, label="score drop when band removed")
-    ax.set_title("2 · Which frequency band, at which moment, drives the verdict (blue = looks human)")
-    imgs.append(("Time × frequency map", "Blue cells: removing that 1 kHz band at that moment makes the file look less human, so the model relies on it as evidence of a real voice. Red cells: that band pushes the verdict towards AI.", _png(fig)))
-
-    # 3 band importance
-    bm = band_d[use].mean(0)
-    fig, ax = plt.subplots(figsize=(9, 3.4))
-    ax.bar(range(8), bm, color=["#4dabf7" if v >= 0 else "#ff6b6b" for v in bm], width=.7)
-    ax.set_xticks(range(8), [f"{lo//1000}–{hi//1000} kHz" for lo, hi in BANDS]); ax.axhline(0, color=MUT, lw=1)
-    ax.set_ylabel("mean score drop"); ax.set_title("3 · Frequency-band importance (blue = evidence for human, red = evidence for AI)")
-    imgs.append(("Frequency bands", "Average over speech windows of picture 2. The tallest bars are the parts of the spectrum the verdict depends on most.", _png(fig)))
-
-    # 4 layer importance
-    lm = layer_d[use].mean(0); wts = torch.softmax(lw, 0).cpu().numpy()
-    fig, ax = plt.subplots(figsize=(9, 3.4))
-    ax.bar(range(n_layers), lm, color=["#4dabf7" if v >= 0 else "#ff6b6b" for v in lm], width=.7, label="score drop when layer removed")
-    a2 = ax.twinx(); a2.plot(range(n_layers), wts, color="#ffd43b", marker="o", lw=1.5, label="learned layer weight"); a2.grid(False)
-    a2.set_ylabel("learned weight", color="#ffd43b"); ax.axhline(0, color=MUT, lw=1)
-    ax.set_xticks(range(n_layers), ["CNN"] + [str(i) for i in range(1, n_layers)]); ax.set_xlabel("WavLM layer (low = acoustic detail, high = speech content)")
-    ax.set_ylabel("mean score drop"); ax.set_title("4 · Which WavLM layers carry the verdict")
-    imgs.append(("WavLM layers", "Bars: how much the verdict depends on each layer of WavLM for this file. Low layers describe raw sound texture, high layers describe phonetic content. Yellow: the fixed weight the model learned for each layer.", _png(fig)))
-
-    # 5 attention
-    tt = np.arange(len(att_t)) / 50
-    fig, ax = plt.subplots(figsize=(9, 3.2))
     env = np.sqrt(np.convolve(xs ** 2, np.ones(320) / 320, "same"))[::320]
-    ax.fill_between(np.arange(len(env)) / 50, 0, env / (env.max() + 1e-9), color="#3b4658", label="loudness")
-    ax.plot(tt, att_t / np.nanmax(att_t), color="#ffd43b", lw=1.4, label="model attention")
-    ax.set_xlim(0, dur); ax.set_xlabel("time (s)"); ax.set_yticks([]); ax.legend(frameon=False, loc="upper right", fontsize=8)
-    ax.set_title("5 · Where the model listens (attention over 20 ms frames)")
-    imgs.append(("Attention", "Yellow peaks are the moments the model weighted most when forming its decision (grey = loudness). Peaks on silence or breaths mean the model is using non-speech cues.", _png(fig)))
+    env = env / (env.max() + 1e-9); att = att_t / (np.nanmax(att_t) or 1)
+    n = min(len(env), len(att)); idx = np.linspace(0, n - 1, min(n, 300)).astype(int)
 
-    # 6 spectrum + acoustics
-    ac = acoustic(xs)
-    fr = xs[: len(xs) // 512 * 512].reshape(-1, 512)
-    lt = 10 * np.log10((np.abs(np.fft.rfft(fr * np.hanning(512), axis=1)) ** 2).mean(0) + 1e-12)
-    fig, (ax, at) = plt.subplots(1, 2, figsize=(9, 3.4), gridspec_kw={"width_ratios": [1.6, 1]})
-    ax.plot(np.fft.rfftfreq(512, 1 / SR), lt, color="#4dabf7", lw=1.5); ax.set_xlim(0, 8000)
-    ax.set_xlabel("frequency (Hz)"); ax.set_ylabel("dB"); ax.set_title("6 · Long-term spectrum")
-    at.axis("off")
-    rows = [("Pauses", f"{100*ac['pause_ratio']:.0f}%"), ("Loudness range", f"{ac['loudness_range_db']:.1f} dB"),
-            ("Energy > 4 kHz", f"{ac['energy_above_4k_pct']:.2f}%"), ("Energy < 300 Hz", f"{ac['energy_below_300hz_pct']:.1f}%"),
-            ("Spectral flatness", f"{ac['spectral_flatness']:.3f}"), ("Brightness (centroid)", f"{ac['spectral_centroid_hz']:.0f} Hz"),
-            ("Brightness variation", f"{ac['centroid_variability_hz']:.0f} Hz")]
-    for r, (k, v) in enumerate(rows):
-        at.text(0, 1 - r * .14, k, color=MUT, fontsize=9, va="top"); at.text(1, 1 - r * .14, v, color=FG, fontsize=9, va="top", ha="right", family="monospace")
-    imgs.append(("Acoustic profile", "The overall tone colour of the file and simple measurements. Compare these numbers between a real recording and an AI one of the same speaker.", _png(fig)))
-
-    return {"images": [{"title": t, "caption": c, "png": p} for t, c, p in imgs]}
+    blk = xs[: len(xs) // 512 * 512].reshape(-1, 512)
+    lt = 10 * np.log10((np.abs(np.fft.rfft(blk * np.hanning(512), axis=1)) ** 2).mean(0) + 1e-12)
+    return {
+        "centres": _r(centres, 2), "scores": _r(scores), "speech": [bool(s) for s in speech],
+        "spec": {"dur": round(float(dur), 2), "rows": 64, "cols": cols, "v": (S.T * 99).round().astype(int).ravel().tolist()},
+        "bands": [f"{lo // 1000}–{hi // 1000} kHz" for lo, hi in BANDS],
+        "band_map": _r(band_d), "band_mean": _r(band_d[use].mean(0)),
+        "layer_drop": _r(layer_d[use].mean(0)), "layer_weight": _r(wts, 4),
+        "attention": {"t": _r(idx / 50, 2), "att": _r(att[idx]), "env": _r(env[idx])},
+        "spectrum": {"f": _r(_thin(np.fft.rfftfreq(512, 1 / SR), 129), 0), "db": _r(_thin(lt, 129), 1)},
+        "acoustic": acoustic(xs),
+    }
