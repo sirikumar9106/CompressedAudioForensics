@@ -104,20 +104,25 @@ Trained weights are published in release **[v1.0 – VoxTrace models](https://gi
 
 Put both files in the `models/` folder and run `run_app.bat`; the app loads whichever models it finds.
 
-## Setup and run
+## Quick start (Windows)
+| Double-click | What it does |
+|---|---|
+| `setup.bat` | One-time setup: creates the Python environment, installs PyTorch with CUDA, FFmpeg and the requirements |
+| `run_app.bat` | Starts the web app at http://127.0.0.1:7860 with **VoxTrace-Wild** and **VoxTrace-Base** to choose from |
+| `train_voxtrace_base.bat` | Builds the training set and trains + tests **VoxTrace-Base** (`models/exp010_wavlm_ft.pt`) |
+| `train_voxtrace_wild.bat` | Downloads SpoofCeleb, then trains + tests **VoxTrace-Wild** (`models/exp010_sc_wavlm_ft.pt`) |
+
+To only use the detector, download the two models above and run `setup.bat` once, then `run_app.bat`.
+To train, first fetch the datasets with `tools/download_datasets.bat` and `tools/download_mlaad.bat`
+(Hugging Face datasets need an `HF_TOKEN` with their terms accepted; links in `requirements.txt`).
+Every earlier experiment can be re-run from `archived_experiments/` or with `python experiments/<script>.py`.
+
+Manual setup on other systems:
 ```bash
-# Windows: double-click setup.bat  (creates .venv, picks the right CUDA build, installs FFmpeg)
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu130
 pip install -r requirements.txt
 ```
-| Step | Command |
-|---|---|
-| Download datasets | `tools/download_datasets.bat`, `tools/download_mlaad.bat`; SpoofCeleb is fetched by `train_voxtrace_wild.bat` (needs `HF_TOKEN`; MLAAD and SpoofCeleb terms accepted) |
-| Train + test the models | `train_voxtrace_base.bat` (VoxTrace-Base), `train_voxtrace_wild.bat` (SpoofCeleb download + VoxTrace-Wild) |
-| Web app | `run_app.bat` → http://127.0.0.1:7860 |
-| Earlier experiments | launchers in `archived_experiments/`, or `python experiments/<script>.py` |
-
-Datasets are **not** included; links and paths are listed in `requirements.txt`. Trained models: see *Download the models* above.
+Datasets are **not** included; trained models: see *Download the models* above.
 
 ## Repository layout
 ```
@@ -126,8 +131,8 @@ src/app/        web app: server, diagnostics, single-page UI
 src/data/       audio loading, FFmpeg codec simulation, manifests
 src/evaluation/ EER / AUC / bootstrap CI, Platt calibration
 experiments/    one script per experiment
-archived_experiments/  launchers for earlier experiments (EXP-006 … EXP-011 test runs)
-tools/          setup, dataset download and cleanup scripts
+archived_experiments/  launchers for every earlier experiment
+tools/          environment setup, dataset downloads, disk cleanup
 mapped_results/ graphs per experiment (EXP-001 … EXP-011)
 ```
 
