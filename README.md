@@ -94,6 +94,16 @@ Upload a voice note, choose VoxTrace-Wild or VoxTrace-Base, optionally pick the 
 diagnostic images (spectrogram, time × frequency map, frequency-band and WavLM-layer importance, attention,
 acoustic profile), computed in memory and never stored. Results are probabilistic and are not legal evidence.
 
+## Download the models
+Trained weights are published in release **[v1.0 – VoxTrace models](https://github.com/sirikumar9106/CompressedAudioForensics/releases/tag/v1.0)**:
+
+| Model | File | Size |
+|---|---|---|
+| **VoxTrace-Wild** (default) | [exp010_sc_wavlm_ft.pt](https://github.com/sirikumar9106/CompressedAudioForensics/releases/download/v1.0/exp010_sc_wavlm_ft.pt) | 381 MB |
+| **VoxTrace-Base** | [exp010_wavlm_ft.pt](https://github.com/sirikumar9106/CompressedAudioForensics/releases/download/v1.0/exp010_wavlm_ft.pt) | 381 MB |
+
+Put both files in the `models/` folder and run `run_app.bat`; the app loads whichever models it finds.
+
 ## Setup and run
 ```bash
 # Windows: double-click setup.bat  (creates .venv, picks the right CUDA build, installs FFmpeg)
@@ -107,7 +117,7 @@ pip install -r requirements.txt
 | Web app | `run_app.bat` → http://127.0.0.1:7860 |
 | Earlier experiments | `run_exp006.bat` … `run_exp011.bat`, or `python experiments/<script>.py` |
 
-Datasets and pretrained weights are **not** included; links and paths are listed in `requirements.txt`.
+Datasets are **not** included; links and paths are listed in `requirements.txt`. Trained models: see *Download the models* above.
 
 ## Repository layout
 ```
