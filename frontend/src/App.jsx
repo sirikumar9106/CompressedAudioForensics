@@ -78,7 +78,7 @@ export default function App() {
             <IntroMark size={190} />
             <motion.h1 layoutId="word" className="word big">
               {[..."VoxTrace"].map((c, i) => (
-                <motion.span key={i} style={{ display: "inline-block" }} initial={{ opacity: 0, y: 18, filter: "blur(6px)" }}
+                <motion.span key={i} className={i === 0 || i === 3 ? "vt" : ""} style={{ display: "inline-block" }} initial={{ opacity: 0, y: 18, filter: "blur(6px)" }}
                   animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ delay: 3.2 + i * 0.07, duration: 0.8, ease: [0.2, 0.9, 0.25, 1] }}>{c}</motion.span>
               ))}
             </motion.h1>
@@ -90,7 +90,7 @@ export default function App() {
       {!intro && (
         <motion.header layout className={"brand " + (page === "home" ? "home" : "side")} transition={flow} onClick={() => page !== "home" && go("home")}>
           <motion.span layout className="mark" transition={flow}><Logo size={page === "home" ? 50 : 32} layoutId="logo" /></motion.span>
-          <motion.h1 layoutId="word" className="word" transition={flow}>VoxTrace</motion.h1>
+          <motion.h1 layoutId="word" className="word" transition={flow}><span className="vt">V</span>ox<span className="vt">T</span>race</motion.h1>
         </motion.header>
       )}
 

@@ -83,8 +83,8 @@ button { font: inherit; color: inherit; }
   background: rgba(250, 244, 231, .94); backdrop-filter: blur(10px); }
 .intro h1 { margin-top: 26px; }
 .intro p { font-size: 14px; }
-.word { font-family: var(--display); font-weight: 560; font-size: 30px; letter-spacing: -.015em; line-height: 1.1;
-  background: linear-gradient(180deg, #a77a2c, #5f4114); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.word { font-family: var(--display); font-weight: 560; font-size: 30px; letter-spacing: -.015em; line-height: 1.1; color: #5a4325; }
+.word .vt { background: linear-gradient(180deg, #d9a443, #9c6a1c); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .word.big { font-size: 54px; }
 .brand { position: absolute; z-index: 20; display: flex; align-items: center; gap: 14px; }
 .mark { display: grid; place-items: center; padding: 8px; border-radius: 18px; overflow: visible; }

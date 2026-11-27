@@ -26,16 +26,21 @@ function Wiggle({ speed = 4, ...p }) {
   return <path ref={ref} d={wave()} {...p} />;
 }
 
+// One gold family, a different shade for each thread so the finished mark reads cleanly.
+const SHADES = {
+  w: ["#e9c57a", "#c08d36"],   // wave crossbar: pale honey
+  l: ["#b88634", "#6b4512"],   // left arm: deep bronze
+  r: ["#e0b25a", "#9a6a22"],   // right arm: warm amber
+  s: ["#ebd29a", "#b98a3d"],   // stem: champagne
+  g: ["#d8bd86", "#93703a"],   // ring: antique gold
+};
 function Defs({ id }) {
   return (
     <defs>
-      <linearGradient id={id + "a"} x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor="#ecc874" /><stop offset=".55" stopColor="#b5852f" /><stop offset="1" stopColor="#6e4a17" />
-      </linearGradient>
-      <linearGradient id={id + "b"} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#e3b75e" /><stop offset="1" stopColor="#62410f" />
-      </linearGradient>
-      <filter id={id + "s"} x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.2" floodColor="#6e4a17" floodOpacity=".35" /></filter>
+      {Object.entries(SHADES).map(([k, [c0, c1]]) => (
+        <linearGradient key={k} id={id + k} gradientUnits="userSpaceOnUse" x1="30" y1="10" x2="80" y2="110"><stop offset="0" stopColor={c0} /><stop offset="1" stopColor={c1} /></linearGradient>
+      ))}
+      <filter id={id + "x"} x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.2" floodColor="#6e4a17" floodOpacity=".35" /></filter>
     </defs>
   );
 }
@@ -45,26 +50,26 @@ const loop = (duration, extra = {}) => ({ duration, repeat: Infinity, ease: "eas
 /** mode: "static" (wave keeps wiggling) | "busy" (while authenticating) */
 export default function Logo({ size = 44, mode = "static", layoutId }) {
   const id = useId().replace(/:/g, ""), busy = mode === "busy";
-  const a = `url(#${id}a)`, b = `url(#${id}b)`;
+  const u = (k) => `url(#${id}${k})`;
   return (
     <motion.svg layoutId={layoutId} width={size} height={size} viewBox="0 0 120 120" style={{ overflow: "visible" }} aria-hidden>
       <Defs id={id} />
-      <g filter={`url(#${id}s)`}>
+      <g filter={u("x")}>
         {busy ? (
           <>
             <circle cx="60" cy="60" r="52" stroke="#dccaa2" strokeWidth="3" {...P} opacity=".6" />
-            <motion.circle cx="60" cy="60" r="52" stroke={a} strokeWidth="3.6" {...P} strokeDasharray="70 257" animate={{ rotate: 360 }} transition={loop(1.6, { ease: "linear" })} />
-            <Wiggle speed={9} stroke={a} strokeWidth="5.2" {...P} />
-            {ARMS.map((d, i) => <motion.path key={d} d={d} stroke={b} strokeWidth="6" {...P} initial={{ pathLength: 1 }} animate={{ pathLength: [1, 0.35, 1] }} transition={loop(1.8, { delay: i * 0.25 })} />)}
-            <motion.path d={STEM} stroke={a} strokeWidth="4.4" {...P} style={{ originY: "46px" }} animate={{ scaleY: [1, 0.45, 1] }} transition={loop(0.9)} />
+            <motion.circle cx="60" cy="60" r="52" stroke={u("g")} strokeWidth="3.6" {...P} strokeDasharray="70 257" animate={{ rotate: 360 }} transition={loop(1.6, { ease: "linear" })} />
+            <Wiggle speed={9} stroke={u("w")} strokeWidth="5.2" {...P} />
+            {ARMS.map((d, i) => <motion.path key={d} d={d} stroke={u(i ? "r" : "l")} strokeWidth="6" {...P} initial={{ pathLength: 1 }} animate={{ pathLength: [1, 0.35, 1] }} transition={loop(1.8, { delay: i * 0.25 })} />)}
+            <motion.path d={STEM} stroke={u("s")} strokeWidth="4.4" {...P} style={{ originY: "46px" }} animate={{ scaleY: [1, 0.45, 1] }} transition={loop(0.9)} />
             <motion.circle cx="60" cy="91" r="4.6" fill="#6e4a17" initial={{ cy: 91 }} animate={{ cy: [91, 84, 91] }} transition={loop(0.9)} />
           </>
         ) : (
           <>
-            <path d={RING} stroke={a} strokeWidth="3.2" opacity=".9" {...P} />
-            <Wiggle stroke={a} strokeWidth="5.2" {...P} />
-            {ARMS.map((d) => <path key={d} d={d} stroke={b} strokeWidth="6" {...P} />)}
-            <path d={STEM} stroke={a} strokeWidth="4.4" {...P} />
+            <path d={RING} stroke={u("g")} strokeWidth="3.2" {...P} />
+            <Wiggle stroke={u("w")} strokeWidth="5.2" {...P} />
+            {ARMS.map((d, i) => <path key={d} d={d} stroke={u(i ? "r" : "l")} strokeWidth="6" {...P} />)}
+            <path d={STEM} stroke={u("s")} strokeWidth="4.4" {...P} />
             <circle cx="60" cy="91" r="4.6" fill="#6e4a17" />
           </>
         )}
@@ -76,11 +81,11 @@ export default function Logo({ size = 44, mode = "static", layoutId }) {
 /* ---------- opening sequence: wires slither in from the edges and braid into the mark ---------- */
 // [approach path that ends where the logo stroke starts, logo stroke, width, gradient]
 const WIRES = [
-  ["M-420 -260 C -230 40, -120 -140, -40 60 S 10 10, 28 34", wave(), 5.2, "a"],
-  ["M-320 420 C -120 300, -160 40, 6 22 S 20 30, 28 34", ARMS[0], 6, "b"],
-  ["M440 -300 C 260 -60, 280 120, 130 40 S 100 30, 92 34", ARMS[1], 6, "b"],
-  ["M60 520 C 220 360, -90 230, 70 130 S 60 70, 60 46", STEM, 4.4, "a"],
-  ["M560 120 C 360 380, 220 -140, 150 40 S 112 60, 112 60", RING, 3.2, "a"],
+  ["M-420 -260 C -230 40, -120 -140, -40 60 S 10 10, 28 34", wave(), 5.2, "w"],
+  ["M-320 420 C -120 300, -160 40, 6 22 S 20 30, 28 34", ARMS[0], 6, "l"],
+  ["M440 -300 C 260 -60, 280 120, 130 40 S 100 30, 92 34", ARMS[1], 6, "r"],
+  ["M60 520 C 220 360, -90 230, 70 130 S 60 70, 60 46", STEM, 4.4, "s"],
+  ["M560 120 C 360 380, 220 -140, 150 40 S 112 60, 112 60", RING, 3.2, "g"],
 ];
 const tail = (d) => d.replace(/^M[-\d.\s]+/, " ");
 
@@ -109,7 +114,7 @@ export function IntroMark({ size }) {
       animate={done ? { filter: ["drop-shadow(0 0 0 rgba(214,168,79,0))", "drop-shadow(0 0 18px rgba(214,168,79,.8))", "drop-shadow(0 0 4px rgba(214,168,79,.3))"] } : {}}
       transition={{ duration: 1.4 }} aria-hidden>
       <Defs id={id} />
-      {WIRES.map(([a, l, w, g]) => <path key={a} className="wire" d={a + tail(l)} stroke={`url(#${id}${g})`} strokeWidth={w} {...P} />)}
+      <g filter={`url(#${id}x)`}>{WIRES.map(([a, l, w, g]) => <path key={a} className="wire" d={a + tail(l)} stroke={`url(#${id}${g})`} strokeWidth={w} {...P} />)}</g>
       <motion.circle cx="60" cy="91" r="4.6" fill="#6e4a17" initial={{ scale: 0 }} animate={{ scale: done ? 1 : 0 }} transition={{ type: "spring", stiffness: 260, damping: 12 }} />
     </motion.svg>
   );
