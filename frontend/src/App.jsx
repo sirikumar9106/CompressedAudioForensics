@@ -38,6 +38,8 @@ export default function App() {
   const [intro, setIntro] = useState(!matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState(null);
+  const [form, setForm] = useState({ file: null, model: "voxtrace-wild", src: SOURCES[0] });   // kept when going Back
+  const newCheck = () => { setForm((f) => ({ ...f, file: null })); go("home"); };              // New check clears the audio
   const resRef = useRef(null); resRef.current = res;
   const pageRef = useRef(page);
 
@@ -98,7 +100,7 @@ export default function App() {
             <button className="glass-btn round" onClick={() => go(page === "details" ? "result" : "home")} title="Back">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 6l-6 6 6 6" /></svg><span>Back</span>
             </button>
-            <button className="glass-btn round" onClick={() => go("home")} title="Start a new check">
+            <button className="glass-btn round" onClick={newCheck} title="Start a new check">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66" /><path d="M20 4v5h-5" /></svg><span>New check</span>
             </button>
           </motion.nav>
@@ -109,8 +111,8 @@ export default function App() {
         <AnimatePresence initial={false} custom={dir} mode="popLayout">
           <motion.main key={page} className={"page pg-" + page} custom={dir} variants={slide}
             initial={intro ? false : "enter"} animate="center" exit="exit" transition={flow}>
-            {page === "home" && <Home onCheck={check} show={!intro} />}
-            {page === "result" && res && <Result r={res} />}
+            {page === "home" && <Home onCheck={check} show={!intro} form={form} setForm={setForm} />}
+            {page === "result" && res && <Result r={res} onNew={newCheck} />}
             {page === "details" && res && <Details r={res} />}
           </motion.main>
         </AnimatePresence>
@@ -139,12 +141,12 @@ export function Tilt({ children, max = 3, style, ...rest }) {
 }
 
 /* ---------------- home: one card ---------------- */
-function Home({ onCheck, show }) {
-  const [file, setFile] = useState(null);
+function Home({ onCheck, show, form, setForm }) {
+  const { file, model, src } = form;
+  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const setFile = set("file"), setModel = set("model"), setSrc = set("src");
   const [models, setModels] = useState([]);
-  const [model, setModel] = useState("voxtrace-wild");
   const [notes, setNotes] = useState({});
-  const [src, setSrc] = useState(SOURCES[0]);
   const [open, setOpen] = useState(false);
   const [over, setOver] = useState(false);
   const [err, setErr] = useState("");
@@ -152,7 +154,7 @@ function Home({ onCheck, show }) {
   const input = useRef();
 
   useEffect(() => {
-    fetch("/api/models").then((r) => r.json()).then((l) => { setModels(l); if (l.length && !l.some((m) => m.id === "voxtrace-wild")) setModel(l[0].id); }).catch(() => {});
+    fetch("/api/models").then((r) => r.json()).then((l) => { setModels(l); if (l.length && !l.some((m) => m.id === model)) setModel(l[0].id); }).catch(() => {});
     fetch("/api/platforms").then((r) => r.json()).then((l) => { setNotes(Object.fromEntries(l.map((p) => [p.id, p.note]))); setReady(true); }).catch(() => setReady(false));
     const close = () => setOpen(false);
     addEventListener("click", close);
@@ -270,7 +272,7 @@ function Count({ to }) {
   return v;
 }
 
-function Result({ r }) {
+function Result({ r, onNew }) {
   const human = r.p_real >= 0.5, pct = Math.round((human ? r.p_real : r.p_fake) * 100);
   const C = 2 * Math.PI * 92;
   const tone = r.level === "real" ? "real" : r.level === "fake" ? "fake" : "warn";
@@ -303,7 +305,7 @@ function Result({ r }) {
       {r.level !== "real" && <ul className="advice">{r.advice.slice(0, 3).map((a) => <li key={a}>{a}</li>)}</ul>}
       <div className="actions">
         <button className="cta" onClick={() => go("details")}>Check the details</button>
-        <button className="glass-btn ghost" onClick={() => go("home")}>Check another file</button>
+        <button className="glass-btn ghost" onClick={onNew}>Check another file</button>
       </div>
     </section>
   );
