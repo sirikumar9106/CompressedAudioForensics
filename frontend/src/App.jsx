@@ -193,6 +193,8 @@ function Home({ onCheck, show, form, setForm }) {
         </AnimatePresence>
       </div>
 
+      <AnimatePresence initial={false}>{file && <Player key={file.name + file.size} file={file} />}</AnimatePresence>
+
       <label className="lbl">Detection model</label>
       <div className="seg glass-in">
         {models.map((m) => (
@@ -235,6 +237,27 @@ function Home({ onCheck, show, form, setForm }) {
       <AnimatePresence>{err && <motion.p className="err" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}>{err}</motion.p>}</AnimatePresence>
       <p className="foot">Audio is analysed on this computer and deleted straight away.</p>
     </Tilt>
+  );
+}
+
+/* ---------------- listen to the chosen file before checking it ---------------- */
+const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+function Player({ file }) {
+  const a = useRef(), [url] = useState(() => URL.createObjectURL(file));
+  const [on, setOn] = useState(false), [t, setT] = useState(0), [dur, setDur] = useState(0);
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  const seek = (e) => { const r = e.currentTarget.getBoundingClientRect(); if (dur) a.current.currentTime = ((e.clientX - r.left) / r.width) * dur; };
+  return (
+    <motion.div className="player" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={flow}>
+      <audio ref={a} src={url} preload="metadata" onLoadedMetadata={(e) => setDur(e.target.duration || 0)}
+        onTimeUpdate={(e) => setT(e.target.currentTime)} onPlay={() => setOn(true)} onPause={() => setOn(false)} onEnded={() => setOn(false)} />
+      <button type="button" className="glass-btn play" onClick={() => (on ? a.current.pause() : a.current.play())} aria-label={on ? "Pause" : "Play"}>
+        {on ? <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2" /><rect x="14" y="5" width="4" height="14" rx="1.2" /></svg>
+            : <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" /></svg>}
+      </button>
+      <div className="track" onClick={seek}><motion.i animate={{ width: dur ? `${(t / dur) * 100}%` : 0 }} transition={{ duration: 0.25, ease: "linear" }} /></div>
+      <span className="time">{clock(t)} / {dur ? clock(dur) : "–:––"}</span>
+    </motion.div>
   );
 }
 

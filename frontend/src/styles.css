@@ -119,6 +119,12 @@ button { font: inherit; color: inherit; }
 .bars i { width: 3px; border-radius: 2px; background: linear-gradient(#d9ad5c, #8d6223); animation: bar 1.3s ease-in-out infinite; }
 @keyframes bar { 0%, 100% { height: 5px } 50% { height: 20px } }
 
+.player { display: flex; align-items: center; gap: 12px; overflow: hidden; padding-top: 12px; }
+.play { width: 40px; height: 40px; flex: none; border-radius: 50%; display: grid; place-items: center; color: #5e3f12; }
+.play svg { position: relative; }
+.track { flex: 1; height: 8px; border-radius: 99px; cursor: pointer; background: rgba(164, 120, 50, .16); box-shadow: inset 0 1px 2px rgba(110, 76, 24, .2); overflow: hidden; }
+.track i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #e2bd6e, #a8762a); }
+.time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
 .lbl { display: block; font-size: 12.5px; font-weight: 700; color: var(--muted); margin: 22px 0 9px; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 18px; }
 .seg button { position: relative; border: 0; background: none; cursor: pointer; padding: 11px 12px; border-radius: 14px; text-align: left; z-index: 0; }
