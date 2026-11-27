@@ -154,6 +154,13 @@
   @keyframes sp{to{transform:rotate(360deg)}}
   .err{color:#dfe6f1;font-size:13px;margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line-2);display:none}
   footer{margin-top:36px;color:var(--faint);font-size:12px;line-height:1.6;text-align:center}
+  .models{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 8px}
+  .mdl{text-align:left;cursor:pointer;padding:12px 14px;border-radius:12px;border:1px solid var(--line-2);
+    background:linear-gradient(145deg,var(--slate-2),var(--ink-2));color:var(--text);font:inherit;transition:border-color .2s,transform .15s}
+  .mdl:hover{transform:translateY(-1px)}
+  .mdl b{display:block;font-size:14.5px;letter-spacing:.2px}
+  .mdl span{display:block;font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+  .mdl.on{border-color:#a9bbd6;box-shadow:0 0 0 1px #a9bbd6 inset}
 </style>
 </head>
 <body>
@@ -178,6 +185,10 @@
       </div>
       <div class="file" id="fileBox"><div class="badge q">♪</div><div class="nm" id="fname"></div><div class="sz" id="fsize"></div></div>
       <audio id="player" controls></audio>
+
+      <label class="lbl">Detection model</label>
+      <div class="models" id="models"></div>
+      <div class="hint" id="modelHint"></div>
 
       <label class="lbl">Where did you receive this audio?</label>
       <div class="select" id="sel">
@@ -258,7 +269,7 @@
     </section>
   </div>
 
-  <footer>Research prototype · WavLM-Base+ partially fine-tuned on multi-dataset real-world speech (EXP-008b) · audio is processed in memory and deleted immediately · results are probabilistic and are not legal evidence</footer>
+  <footer>Research prototype · VoxTrace detectors: WavLM-Base+ fine-tuned with a sound-texture branch, trained on real-world and modern AI speech · audio is processed in memory and deleted immediately · results are probabilistic and are not legal evidence</footer>
 </div>
 <div class="tip" id="tip"></div>
 
@@ -272,6 +283,15 @@ const SOURCES = [
 let notes = {}, platform = "unknown", file = null;
 
 // status + platform notes
+let modelId="voxtrace-wild";
+fetch("/api/models").then(r=>r.json()).then(list=>{
+  if(!list.length){ $("#models").style.display="none"; return; }
+  if(!list.some(m=>m.id===modelId)) modelId=list[0].id;
+  const draw=()=>{ $("#models").innerHTML=list.map(m=>`<button type="button" class="mdl${m.id===modelId?" on":""}" data-id="${m.id}"><b>${m.name}</b><span>${m.desc}</span></button>`).join("");
+    $("#models").querySelectorAll(".mdl").forEach(b=>b.onclick=()=>{modelId=b.dataset.id; draw();});
+    $("#modelHint").textContent="Both models are always available; the result shows which one was used."; };
+  draw();
+});
 fetch("/api/platforms").then(r=>r.json()).then(list=>{
   list.forEach(p=>notes[p.id]=p); $("#dot").classList.add("on"); $("#status").textContent="model ready · local GPU";
   buildMenu();
@@ -312,7 +332,7 @@ function setFile(f){
 $("#go").onclick=async()=>{
   if(!file) return; const b=$("#go"); b.disabled=true; b.innerHTML='<span class="spin"></span>Analysing…';
   $("#err").style.display="none";
-  const fd=new FormData(); fd.append("file",file); fd.append("platform",platform);
+  const fd=new FormData(); fd.append("file",file); fd.append("platform",platform); fd.append("model",modelId);
   try{
     const r=await fetch("/api/analyze",{method:"POST",body:fd});
     const j=await r.json(); if(!r.ok) throw new Error(j.detail||"Analysis failed");

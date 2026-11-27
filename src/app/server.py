@@ -46,29 +46,50 @@ PLATFORMS = {
 
 app = FastAPI(title="CompressedAudioForensics")
 STATE = {}
+MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
+# Selectable detectors (VoxTrace family: WavLM-Base+ fine-tuned, main branch + low-layer texture branch)
+MODEL_REGISTRY = {
+    "voxtrace-wild": {
+        "file": "exp010_sc_wavlm_ft.pt", "name": "VoxTrace-Wild",
+        "desc": "Trained on 5 datasets + 120,000 in-the-wild celebrity clips (SpoofCeleb), with 64/32/16/8 kbps compression",
+        "note": "VoxTrace-Wild: on 2,000 real-world clips it never saw it is 95.8% accurate (5.2% of real voices flagged, "
+                "3.3% of AI voices missed); it catches 99.1% of voices from 31 AI tools it never trained on and 99.7% "
+                "of SpoofCeleb's evaluation set."},
+    "voxtrace-base": {
+        "file": "exp010_wavlm_ft.pt", "name": "VoxTrace-Base",
+        "desc": "Trained on 5 datasets incl. 143 modern TTS / voice-cloning systems (MLAAD)",
+        "note": "VoxTrace-Base: on 2,000 real-world clips it never saw it is 94.8% accurate (6.3% of real voices flagged, "
+                "4.1% of AI voices missed) and catches 98.7% of voices from 31 unseen AI tools. It is less reliable on "
+                "noisy interview-style real recordings, which it often flags as AI."},
+}
 
 
 @app.on_event("startup")
 def _load():
-    ft = Path(__file__).resolve().parents[2] / "models" / os.environ.get("CAF_MODEL", "exp010_wavlm_ft.pt")
-    if ft.exists():   # fine-tuned real-world detector (EXP-008b): one model for every bitrate
-        from src.models.wavlm_detector import WavLMDetector
-        ck = torch.load(ft, map_location="cpu")
-        m = WavLMDetector(**ck.get("arch", {})); m.load_state_dict(ck["state_dict"]); STATE["ft"] = m.to(DEVICE).eval()
-        # EXP-008b: strict point was best on In-the-Wild; EXP-010 (has "arch"): balanced point is best there
-        thr = ck["threshold"] if ck.get("arch") else ck.get("threshold_strict", ck["threshold"])
-        STATE["art"] = {"version": ck.get("version", ft.stem), "platt": ck["platt"],
-                        "shift": math.log(thr / (1 - thr))}
-    else:            # lab model F (frozen WavLM + probe)
+    from src.models.wavlm_detector import WavLMDetector
+    STATE["models"] = {}
+    for key, info in MODEL_REGISTRY.items():
+        f = MODELS_DIR / info["file"]
+        if not f.exists():
+            continue
+        ck = torch.load(f, map_location="cpu")
+        m = WavLMDetector(**ck.get("arch", {})); m.load_state_dict(ck["state_dict"])
+        thr = ck["threshold"]
+        STATE["models"][key] = {**info, "m": m.to(DEVICE).eval(), "platt": ck["platt"],
+                                "shift": math.log(thr / (1 - thr))}
+        print(f"[loaded] {info['name']} ({f.name})", flush=True)
+    if STATE["models"]:
+        STATE["art"] = {"version": "VoxTrace"}
+    else:            # fallback: lab model F (frozen WavLM + probe)
         from transformers import WavLMModel
         STATE["wavlm"] = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").to(DEVICE).eval()
         STATE["art"] = model_store.load()
-    print(f"[ready] device={DEVICE}  model={STATE['art']['version']}", flush=True)
+    print(f"[ready] device={DEVICE}  models={list(STATE['models']) or STATE['art']['version']}", flush=True)
 
 
 @torch.no_grad()
-def ft_scores(ws):
-    m, out = STATE["ft"], []
+def ft_scores(ws, m):
+    out = []
     for i in range(0, len(ws), 8):
         t = torch.stack([torch.from_numpy(peak_normalize(w.astype(np.float32))) for w in ws[i:i + 8]]).to(DEVICE)
         with torch.autocast(DEVICE, dtype=torch.float16, enabled=DEVICE == "cuda"):
@@ -155,7 +176,7 @@ def density(vals, grid, bw):
 
 
 @app.post("/api/analyze")
-async def analyze(file: UploadFile = File(...), platform: str = Form("unknown")):
+async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"), model: str = Form("voxtrace-wild")):
     if "art" not in STATE:
         raise HTTPException(503, "Model is still loading, try again in a moment.")
     tmpdir = tempfile.mkdtemp(prefix="caf_")
@@ -171,11 +192,13 @@ async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"))
         raise HTTPException(400, "Audio is shorter than 0.5 s.")
 
     art = STATE["art"]
+    M = STATE["models"].get(model) or next(iter(STATE["models"].values()), None)
     calib, why, from_header = choose_calibration(platform, meta)
     W = windows(x)
-    if "ft" in STATE:   # P(real) re-centred so the deployed threshold sits at 0.5
+    if M:               # P(real) re-centred so the model's deployed threshold sits at 0.5
+        art = M
         a, b = art["platt"]
-        scores = ft_scores([w for _, _, w in W])
+        scores = ft_scores([w for _, _, w in W], M["m"])
         probs = 1 / (1 + np.exp(-(a * scores + b - art["shift"])))
     else:
         probe = art["probe_U"] if calib == "unknown" else art["probe_F"]
@@ -211,13 +234,11 @@ async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"))
         verdict, level = "Likely AI-generated voice", "fake"
 
     notes = []
-    if "ft" in STATE:
-        notes.append("Model EXP-010 (real-world speech + 140 modern TTS/voice-cloning systems): on the In-the-Wild benchmark "
-                     "it calls about 7% of real voices AI and misses about 4% of AI voices; on 31 cloning tools it never "
-                     "saw in training it catches 75-100% of clips (ElevenLabs about 85%, MiniMax about 83%).")
+    if M:
+        notes.append(M["note"])
     elif calib == "8k":
         notes.append("Very low bitrate (about 8 kbps): measured accuracy about 95%, lower than at higher bitrates.")
-    if calib == "unknown" and "ft" not in STATE:
+    if calib == "unknown" and not M:
         notes.append("General model without a bitrate hint: measured accuracy 95-97% down to 16 kbps but about 78% at 8 kbps. "
                      "Choose the source app if you know it.")
     if len(W) > 1 and spread > 0.3:
@@ -236,10 +257,10 @@ async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"))
                   "Ask something only the real person would know."] + advice
 
     diag = None
-    if "ft" in STATE:
+    if M:
         try:
             from src.app import diagnostics
-            diag = diagnostics.run(STATE["ft"], x, W, speech, scores, DEVICE)
+            diag = diagnostics.run(M["m"], x, W, speech, scores, DEVICE)
         except Exception as e:  # diagnostics must never break the verdict
             print("[diagnostics failed]", repr(e), flush=True)
 
@@ -257,8 +278,13 @@ async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"))
         "reference": {"grid": grid.round(3).tolist(), "real": density(ref["real"], grid, bw),
                       "fake": density(ref["fake"], grid, bw), "file_score": round(s_med, 3),
                       "threshold": round(-b / a, 3) if a else 0.0} if ref is not None else None,
-        "notes": notes, "advice": advice, "model": art["version"],
+        "notes": notes, "advice": advice, "model": M["name"] if M else art["version"],
     })
+
+
+@app.get("/api/models")
+def models():
+    return [{"id": k, "name": v["name"], "desc": v["desc"]} for k, v in STATE.get("models", {}).items()]
 
 
 @app.get("/api/platforms")
