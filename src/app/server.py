@@ -155,7 +155,7 @@ def density(vals, grid, bw):
 
 
 @app.post("/api/analyze")
-async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"), truth: str = Form("unknown")):
+async def analyze(file: UploadFile = File(...), platform: str = Form("unknown")):
     if "art" not in STATE:
         raise HTTPException(503, "Model is still loading, try again in a moment.")
     tmpdir = tempfile.mkdtemp(prefix="caf_")
@@ -239,9 +239,7 @@ async def analyze(file: UploadFile = File(...), platform: str = Form("unknown"),
     if "ft" in STATE:
         try:
             from src.app import diagnostics
-            t = truth if truth in ("real", "ai") else "unknown"
-            diag = diagnostics.run(STATE["ft"], x, W, speech, scores, DEVICE,
-                                   Path(__file__).resolve().parents[2] / "results" / "diagnostics", file.filename or "upload", t)
+            diag = diagnostics.run(STATE["ft"], x, W, speech, scores, DEVICE)
         except Exception as e:  # diagnostics must never break the verdict
             print("[diagnostics failed]", repr(e), flush=True)
 

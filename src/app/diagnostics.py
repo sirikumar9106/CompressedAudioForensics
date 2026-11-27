@@ -6,10 +6,9 @@ Six pictures, all in the model's own score units (log-odds of "real"; +ve = soun
   5 where the model listens (attention)   6 long-term spectrum + simple acoustic measurements
 Occlusion = remove one 1 kHz band (or one layer) and measure how much the score drops.
 A positive bar means "this part makes the file look HUMAN to the model".
-Everything is also written to summary.json so real and AI files can be compared numerically.
+Images are returned to the web page only (base64); nothing is written to disk.
 """
-import base64, io, json, re, time
-from pathlib import Path
+import base64, io
 
 import numpy as np
 import torch
@@ -54,8 +53,8 @@ def _band_stop(x, lo, hi):
     return np.fft.irfft(X, len(x))
 
 
-def _png(fig, folder, name):
-    fig.tight_layout(); fig.savefig(folder / name, dpi=130)
+def _png(fig):
+    fig.tight_layout()
     buf = io.BytesIO(); fig.savefig(buf, format="png", dpi=110); plt.close(fig)
     return base64.b64encode(buf.getvalue()).decode()
 
@@ -82,7 +81,7 @@ def acoustic(x):
             "centroid_variability_hz": float(cen.std())}
 
 
-def run(model, x, W, speech, scores, dev, out_root, name, truth="unknown"):
+def run(model, x, W, speech, scores, dev):
     W, speech, scores = W[:MAX_WIN], np.asarray(speech[:MAX_WIN]), np.asarray(scores[:MAX_WIN])
     wavs = [w for _, _, w in W]
     lw = model.layer_w.detach()
@@ -108,9 +107,6 @@ def run(model, x, W, speech, scores, dev, out_root, name, truth="unknown"):
             band_d[i:i + len(chunk), bi] = base - sc
     att_t = np.where(C_att > 0, T_att / np.maximum(C_att, 1), np.nan)
 
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    folder = Path(out_root) / f"{stamp}_{truth}_{re.sub(r'[^A-Za-z0-9]+', '_', Path(name).stem)[:40]}"
-    folder.mkdir(parents=True, exist_ok=True)
     dur = W[-1][1]; xs = x[: int(dur * SR)]
     centres = np.array([(a + b) / 2 for a, b, _ in W])
     imgs = []
@@ -123,7 +119,7 @@ def run(model, x, W, speech, scores, dev, out_root, name, truth="unknown"):
     a2 = ax.twinx(); a2.plot(centres, scores, color="#7fd1ff", lw=2, marker="o", ms=4)
     a2.axhline(0, color="#7fd1ff", ls="--", lw=1, alpha=.6); a2.set_ylabel("score (+ human / − AI)", color="#7fd1ff"); a2.grid(False)
     ax.set_title("1 · Spectrogram with the model's score per 4 s window")
-    imgs.append(("Spectrogram + score", "What the audio contains over time, and how human each window sounded to the model (above the dashed line = human).", _png(fig, folder, "1_spectrogram_score.png")))
+    imgs.append(("Spectrogram + score", "What the audio contains over time, and how human each window sounded to the model (above the dashed line = human).", _png(fig)))
 
     # 2 time x band occlusion
     lim = max(np.abs(band_d).max(), 1e-3)
@@ -134,7 +130,7 @@ def run(model, x, W, speech, scores, dev, out_root, name, truth="unknown"):
     ax.set_xticks(np.arange(len(W)) + .5, [f"{c:.0f}" for c in centres], fontsize=7); ax.set_xlabel("window centre (s)"); ax.grid(False)
     fig.colorbar(im, ax=ax, label="score drop when band removed")
     ax.set_title("2 · Which frequency band, at which moment, drives the verdict (blue = looks human)")
-    imgs.append(("Time × frequency map", "Blue cells: removing that 1 kHz band at that moment makes the file look less human, so the model relies on it as evidence of a real voice. Red cells: that band pushes the verdict towards AI.", _png(fig, folder, "2_time_band_map.png")))
+    imgs.append(("Time × frequency map", "Blue cells: removing that 1 kHz band at that moment makes the file look less human, so the model relies on it as evidence of a real voice. Red cells: that band pushes the verdict towards AI.", _png(fig)))
 
     # 3 band importance
     bm = band_d[use].mean(0)
@@ -142,7 +138,7 @@ def run(model, x, W, speech, scores, dev, out_root, name, truth="unknown"):
     ax.bar(range(8), bm, color=["#4dabf7" if v >= 0 else "#ff6b6b" for v in bm], width=.7)
     ax.set_xticks(range(8), [f"{lo//1000}–{hi//1000} kHz" for lo, hi in BANDS]); ax.axhline(0, color=MUT, lw=1)
     ax.set_ylabel("mean score drop"); ax.set_title("3 · Frequency-band importance (blue = evidence for human, red = evidence for AI)")
-    imgs.append(("Frequency bands", "Average over speech windows of picture 2. The tallest bars are the parts of the spectrum the verdict depends on most.", _png(fig, folder, "3_band_importance.png")))
+    imgs.append(("Frequency bands", "Average over speech windows of picture 2. The tallest bars are the parts of the spectrum the verdict depends on most.", _png(fig)))
 
     # 4 layer importance
     lm = layer_d[use].mean(0); wts = torch.softmax(lw, 0).cpu().numpy()
@@ -152,7 +148,7 @@ def run(model, x, W, speech, scores, dev, out_root, name, truth="unknown"):
     a2.set_ylabel("learned weight", color="#ffd43b"); ax.axhline(0, color=MUT, lw=1)
     ax.set_xticks(range(n_layers), ["CNN"] + [str(i) for i in range(1, n_layers)]); ax.set_xlabel("WavLM layer (low = acoustic detail, high = speech content)")
     ax.set_ylabel("mean score drop"); ax.set_title("4 · Which WavLM layers carry the verdict")
-    imgs.append(("WavLM layers", "Bars: how much the verdict depends on each layer of WavLM for this file. Low layers describe raw sound texture, high layers describe phonetic content. Yellow: the fixed weight the model learned for each layer.", _png(fig, folder, "4_layer_importance.png")))
+    imgs.append(("WavLM layers", "Bars: how much the verdict depends on each layer of WavLM for this file. Low layers describe raw sound texture, high layers describe phonetic content. Yellow: the fixed weight the model learned for each layer.", _png(fig)))
 
     # 5 attention
     tt = np.arange(len(att_t)) / 50
@@ -162,7 +158,7 @@ def run(model, x, W, speech, scores, dev, out_root, name, truth="unknown"):
     ax.plot(tt, att_t / np.nanmax(att_t), color="#ffd43b", lw=1.4, label="model attention")
     ax.set_xlim(0, dur); ax.set_xlabel("time (s)"); ax.set_yticks([]); ax.legend(frameon=False, loc="upper right", fontsize=8)
     ax.set_title("5 · Where the model listens (attention over 20 ms frames)")
-    imgs.append(("Attention", "Yellow peaks are the moments the model weighted most when forming its decision (grey = loudness). Peaks on silence or breaths mean the model is using non-speech cues.", _png(fig, folder, "5_attention.png")))
+    imgs.append(("Attention", "Yellow peaks are the moments the model weighted most when forming its decision (grey = loudness). Peaks on silence or breaths mean the model is using non-speech cues.", _png(fig)))
 
     # 6 spectrum + acoustics
     ac = acoustic(xs)
@@ -178,13 +174,6 @@ def run(model, x, W, speech, scores, dev, out_root, name, truth="unknown"):
             ("Brightness variation", f"{ac['centroid_variability_hz']:.0f} Hz")]
     for r, (k, v) in enumerate(rows):
         at.text(0, 1 - r * .14, k, color=MUT, fontsize=9, va="top"); at.text(1, 1 - r * .14, v, color=FG, fontsize=9, va="top", ha="right", family="monospace")
-    imgs.append(("Acoustic profile", "The overall tone colour of the file and simple measurements. Compare these numbers between a real recording and an AI one of the same speaker.", _png(fig, folder, "6_acoustic_profile.png")))
+    imgs.append(("Acoustic profile", "The overall tone colour of the file and simple measurements. Compare these numbers between a real recording and an AI one of the same speaker.", _png(fig)))
 
-    summary = {"file": name, "truth": truth, "time": stamp, "windows": len(W),
-               "score_median": float(np.median(scores[use])), "window_scores": scores.round(3).tolist(),
-               "band_importance": dict(zip([f"{lo//1000}-{hi//1000}k" for lo, hi in BANDS], bm.round(3).tolist())),
-               "layer_importance": lm.round(3).tolist(), "layer_weights": wts.round(4).tolist(),
-               "attention_on_quiet_pct": _quiet(att_t, env),
-               "acoustic": ac}
-    json.dump(summary, open(folder / "summary.json", "w"), indent=2)
-    return {"folder": str(folder), "images": [{"title": t, "caption": c, "png": p} for t, c, p in imgs]}
+    return {"images": [{"title": t, "caption": c, "png": p} for t, c, p in imgs]}
