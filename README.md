@@ -10,19 +10,26 @@ detectors are trained on clean studio audio, while real scam audio arrives heavi
 This project builds a detector for the audio people *actually* receive: one compressed file, no original to compare.
 
 ## Result
-The final model (**EXP-010**) reaches **94.6% accuracy on 2,000 real-world clips it never saw**, catches
-**98.5% of voices from 31 AI voice tools it was never trained on** (ElevenLabs, OpenAI, MiniMax, Qwen …), and
-passed a live test with real and AI voices shared over WhatsApp.
+Two detectors, selectable in the app, built on the same design:
+
+| Model | Trained on | In-the-Wild (2,000 real-world clips) | 31 unseen AI voice tools | SpoofCeleb evaluation |
+|---|---|---|---|---|
+| **VoxTrace-Wild** (default, EXP-011) | 5 datasets + 120,000 in-the-wild celebrity clips (SpoofCeleb), 64/32/16/8 kbps | **95.8%** (EER 3.8%) | **99.1%** (EER 0.7%) | **99.7%** |
+| **VoxTrace-Base** (EXP-010) | 5 datasets incl. 143 modern TTS / cloning systems (MLAAD) | 94.8% (EER 5.0%) | 98.7% (EER 1.3%) | 75.0% |
+
+All test sets were never used for training. The 31 tools include ElevenLabs, OpenAI, MiniMax and Qwen. Both models
+passed live tests with real and AI voices shared over WhatsApp.
 
 ![Real-world benchmark across experiments](mapped_results/journey_in_the_wild.png)
 
-| Test (never trained on) | Accuracy | Real voice called AI | AI voice called real | EER |
+| VoxTrace-Wild, test never trained on | Accuracy | Real voice called AI | AI voice called real | EER |
 |---|---|---|---|---|
-| In-the-Wild: 2,000 clips of 58 public figures from online videos | **94.6%** | 7.1% | 3.7% | 5.1% |
-| MLAAD: 31 held-out TTS / voice-cloning systems | **98.5%** | 0.1% | 3.0% | 1.2% |
-| ASVspoof 2019 LA (unseen attacks), clean / MP3 16 kbps | 97.9 / 97.0% | 0.4 / 1.2% | 3.8 / 4.8% | 1.8 / 2.8% |
+| In-the-Wild, original / WhatsApp-quality (Opus 16 kbps) | **95.8 / 94.8%** | 5.2 / 7.3% | 3.3 / 3.2% | 3.8 / 4.6% |
+| MLAAD: 31 held-out TTS / voice-cloning systems | **99.1%** | 0.3% | 1.5% | 0.7% |
+| SpoofCeleb evaluation (9 unseen attack systems) | **99.7%** | 0.2% | 0.5% | 0.2% |
+| ASVspoof 2019 LA (unseen attacks), original / Opus 16 kbps | 98.5 / 98.4% | 0.4 / 1.6% | 2.6 / 1.6% | 1.8 / 1.6% |
 
-## The final model (EXP-010)
+## The model (VoxTrace)
 ```
 any audio file ─► FFmpeg decode (16 kHz mono) ─► 4 s windows, 50% overlap
    └─► WavLM-Base+ (CNN + 12 transformer layers, top 8 fine-tuned)
@@ -30,15 +37,19 @@ any audio file ─► FFmpeg decode (16 kHz mono) ─► 4 s windows, 50% overla
          └─ texture branch: learned weights over layers 0–6    ─► attentive stats pooling ─► MLP ─┴─► summed score
    ─► median over speech windows ─► Platt calibration ─► verdict + timeline + 6 diagnostic images
 ```
-- **Training data (39,472 clips, balanced real/AI inside every source):** ASVspoof 5 (crowdsourced speakers),
-  Fake-or-Real, LibriSeVoc (6 neural vocoders), ASVspoof 2019 LA, and **MLAAD** (143 modern TTS / cloning systems).
-- **Compression robustness:** every clip also has a copy encoded with MP3 / Opus / AAC at 8–64 kbps, so the model
-  learns the voice, not the codec.
-- **Texture branch:** diagnostics showed the earlier model judged only by how *natural* the speech sounded (top
+- **Texture branch:** diagnostics showed an earlier model judged only by how *natural* the speech sounded (top
   WavLM layer). The second branch looks only at the low "sound texture" layers, where synthesis artefacts live.
-- **Honest testing:** 31 TTS systems kept out of training entirely; In-the-Wild and ASVspoof 2019 eval never trained on.
+- **VoxTrace-Base (EXP-010):** 39,472 clips from ASVspoof 5, Fake-or-Real, LibriSeVoc, ASVspoof 2019 LA and
+  **MLAAD** (143 modern TTS systems; 31 held out for testing), each with one random MP3/Opus/AAC copy at 8–64 kbps.
+- **VoxTrace-Wild (EXP-011):** the same data + 120,000 **SpoofCeleb** clips (real celebrity speech from online
+  videos and AI voices built from it), every clip trained original + 64k + 32k, 16k for 35% and 8k for 10%:
+  **550,259 examples**, compressed on the fly. The extra in-the-wild real speech removed a hidden weakness of
+  VoxTrace-Base (it flagged 46% of real interview-style voices) and improved every real-world test.
+- **Honest testing:** whole TTS systems and attack systems held out; In-the-Wild and ASVspoof 2019 eval never trained on.
 
 ![Detection rate per unseen AI voice system](mapped_results/EXP-010_modern_tts/2_unseen_tts_systems.png)
+
+![VoxTrace-Base vs VoxTrace-Wild](mapped_results/EXP-011_spoofceleb_finetune/1_accuracy_all_tests.png)
 
 ## How we got here
 Full write-ups in [`EXPERIMENT_LOG.md`](EXPERIMENT_LOG.md); graphs for every experiment in [`mapped_results/`](mapped_results/).
@@ -68,14 +79,20 @@ Full write-ups in [`EXPERIMENT_LOG.md`](EXPERIMENT_LOG.md); graphs for every exp
   showed why: the decision came almost only from WavLM's top layer, which judges naturalness, and the training
   fakes were all older-generation TTS.
 
-**What we applied in EXP-010:** modern TTS fakes (MLAAD), a texture branch on the low layers, more fine-tuned layers,
-held-out generators for honest testing, and live tests before claiming success.
+**What worked**
+- **EXP-010 · VoxTrace-Base.** Modern TTS fakes (MLAAD), a texture branch on the low layers and more fine-tuned
+  layers: In-the-Wild 84.5% → 94.6%, 98.5% on 31 unseen TTS systems, and the first model to pass the live test.
+- **EXP-010b · Standby for re-compressed audio (not deployed).** A copy of EXP-010 topped up on audio compressed
+  twice: fewer false alarms on forwarded audio, but more missed fakes and a lower lab score, so it was kept aside.
+- **EXP-011 · VoxTrace-Wild.** Tested EXP-010 on SpoofCeleb: it caught 98.8% of the fakes but flagged 46% of the
+  real celebrity voices. Retraining the same design on EXP-010's data + 120,000 SpoofCeleb clips with a stronger
+  compression schedule fixed that (0.2%) and improved In-the-Wild (EER 5.0 → 3.8%) and unseen-TTS results.
 
 ## Web app
 `run_app.bat` starts a local web app (FastAPI, nothing leaves the machine; uploads are deleted after analysis).
-Upload a voice note, optionally pick the source app, and get a verdict, a per-window confidence timeline and six
+Upload a voice note, choose VoxTrace-Wild or VoxTrace-Base, optionally pick the source app, and get a verdict, a per-window confidence timeline and six
 diagnostic images (spectrogram, time × frequency map, frequency-band and WavLM-layer importance, attention,
-acoustic profile). Results are probabilistic and are not legal evidence.
+acoustic profile), computed in memory and never stored. Results are probabilistic and are not legal evidence.
 
 ## Setup and run
 ```bash
@@ -85,23 +102,23 @@ pip install -r requirements.txt
 ```
 | Step | Command |
 |---|---|
-| Download datasets | `download_datasets.bat`, `download_mlaad.bat` (needs `HF_TOKEN`, MLAAD terms accepted) |
-| Train + test the final model | `run_exp010.bat` |
+| Download datasets | `download_datasets.bat`, `download_mlaad.bat`, SpoofCeleb via `overnight_spoofceleb_train.bat` (needs `HF_TOKEN`; MLAAD and SpoofCeleb terms accepted) |
+| Train + test the models | `run_exp010.bat` (VoxTrace-Base), `overnight_spoofceleb_train.bat` (SpoofCeleb download + VoxTrace-Wild) |
 | Web app | `run_app.bat` → http://127.0.0.1:7860 |
-| Earlier experiments | `run_exp006.bat` … `run_exp009b.bat`, or `python experiments/<script>.py` |
+| Earlier experiments | `run_exp006.bat` … `run_exp011.bat`, or `python experiments/<script>.py` |
 
 Datasets and pretrained weights are **not** included; links and paths are listed in `requirements.txt`.
 
 ## Repository layout
 ```
-src/models/     WavLM detector (main + texture branch), RawNet2, Δ-Net
+src/models/     VoxTrace detector (WavLM + main and texture branch), RawNet2, Δ-Net
 src/app/        web app: server, diagnostics, single-page UI
 src/data/       audio loading, FFmpeg codec simulation, manifests
 src/evaluation/ EER / AUC / bootstrap CI, Platt calibration
 experiments/    one script per experiment
-mapped_results/ graphs per experiment (EXP-001 … EXP-010)
+mapped_results/ graphs per experiment (EXP-001 … EXP-011)
 ```
 
 ## Data & licences
-ASVspoof 2019/5, Fake-or-Real, LibriSeVoc, In-the-Wild and MLAAD (CC BY-NC 4.0) are distributed by their authors
+ASVspoof 2019/5, Fake-or-Real, LibriSeVoc, In-the-Wild, MLAAD (CC BY-NC 4.0) and SpoofCeleb (CC BY 4.0) are distributed by their authors
 under their own licences and are not redistributed here. Research use only.

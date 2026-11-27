@@ -40,3 +40,6 @@ Thumbs.db
 # personal voice recordings (biometric data) - never commit
 data/real_world/*
 !data/real_world/.gitkeep
+
+# --- Private research report (published separately, never pushed) ---
+report/

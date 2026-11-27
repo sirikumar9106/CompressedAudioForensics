@@ -202,3 +202,33 @@
 - **Caveats:** MLAAD held-out reals are audiobooks (same family as training reals) → In-the-Wild is the more honest real-world number. False alarms rose 2.1 → 7.1%.
 - **Decision:** EXP-010 is the deployed model (web app default). Backup for extreme re-compression evaluated separately (EXP-010b, not deployed).
 - **Graphs:** `mapped_results/EXP-010_modern_tts/`.
+
+## EXP-010b · 2026-11-25 · Standby copy of EXP-010 for re-compressed audio (NOT deployed) — **BETTER ON DOUBLE-COMPRESSED REAL-WORLD AUDIO, WORSE ON LAB DATA; kept as standby**
+- **Goal:** a backup for evaluators' extreme cases (audio compressed repeatedly) without touching EXP-010.
+- **Setup:** copy of EXP-010 (all prior training kept), short top-up: 1,500 AI + 1,000 real (deliberately asymmetric 60/40) from EXP-010's train manifest, each compressed twice with the same codec + bitrate (MP3/Opus/AAC × 64k/32k/16k; no 8k); 70% double-compressed / 30% original per example; 2 epochs, LR 5e-6 / 1e-4 (~2 min); own calibration on 600 val clips (original + double). Saved as `models/exp010b_wavlm_ft.pt`; the app still uses EXP-010.
+- **Observed (accuracy %, EXP-010 → EXP-010b):** In-the-Wild clean 94.6 → 94.3; 2×64k 91.8 → 92.7; 2×32k 89.6 → 90.1; 2×16k 86.0 → **87.9**; MLAAD held-out clean 98.5 → 98.5; 2×16k 95.2 → 96.0; ASVspoof 2019 clean 97.9 → **96.3**; MP3 16k 97.0 → **94.4**.
+- **Errors at In-the-Wild 2×16k:** false alarms 24.2% → 14.9%; misses 3.9% → 9.3%.
+- **McNemar:** 010b better at ITW 2×64k (p = 0.036), ITW 2×16k (p = 0.002), MLAAD 2×16k (p = 0.044); no difference on clean ITW/MLAAD and ITW 2×32k; 010 better on ASVspoof 2019 clean (p < 0.001) and 16k (p < 0.001).
+- **Why:** EER is not better overall (ITW 2×16k 11.4 → 12.0%); the gain comes mostly from a more forgiving decision point for damaged audio (fewer false alarms, more misses).
+- **Decision:** keep EXP-010 deployed; keep 010b as a standby for heavily re-compressed demo audio, presented with its trade-off.
+- **Graphs:** `mapped_results/EXP-010b_double_compression_backup/`.
+
+## EXP-011 · 2026-11-26/27 · More data: SpoofCeleb test, then a new model fine-tuned on EXP-010 data + SpoofCeleb — **SUCCESS (VoxTrace-Wild)**
+- **Goal:** (a) test the deployed EXP-010 on SpoofCeleb (gated; real speech = VoxCeleb celebrities in the wild, fakes = TTS trained on in-the-wild data); (b) train a new model on even more, and more varied, data without touching EXP-010.
+- **(a) Test only:** the 134 GB archive was streamed (evaluation files kept); the stream stopped at ~127 GB after evaluation attack a23. EXP-010 caught **98.8%** of a23's 6,792 AI clips (98.2% at Opus 16k); real side = 2,000 In-the-Wild clips (false alarms 8.3%, 14.5% at Opus 16k). Fakes were not the problem.
+- **(b) Data:** full SpoofCeleb downloaded (2,687,300 files, single-connection stream, ~10.5 h). Training = EXP-010 manifest (39,472 clips) + SpoofCeleb train 60,000 real (a00) + 60,000 AI (6,000 from each of a01–a10) = 159,472 clips. Compression applied on the fly (in memory, nothing stored): every clip original + 64k + 32k; 16k for 35% of clips; 8k for 10% (MP3 / Opus / AAC at random) → **550,259 training examples** (14× EXP-010).
+- **Model (VoxTrace-Wild):** same architecture as EXP-010 (WavLM-Base+, top 8 layers fine-tuned, main branch + texture branch), trained **from scratch**, one pass, batch 12, OneCycle LR (2e-5 / 1e-3), 0.17 s/step, **2.1 h**. Calibrated on EXP-010 val + 2,000 SpoofCeleb development clips (original + 16/32k copies): val EER 1.27%, AUC 0.9988.
+- **Observed (same files and scoring for both; never trained on; accuracy % / real→AI % / EER %):**
+  | test | VoxTrace-Base (EXP-010) | VoxTrace-Wild (EXP-011) |
+  |---|---|---|
+  | In-the-Wild 2,000, original | 94.8 / 6.3 / 5.0 | **95.8 / 5.2 / 3.8** |
+  | In-the-Wild, Opus 16k | 93.1 / 10.0 / 5.8 | **94.8 / 7.3 / 4.6** |
+  | MLAAD 31 unseen systems, original / Opus 16k | 98.7 / 98.4 (EER 1.3 / 1.3) | **99.1 / 99.1 (EER 0.7 / 1.0)** |
+  | SpoofCeleb eval (1,500 real + 1,494 AI, attacks a15–a23), original | 75.0 / **46.3** / 16.0 | **99.7 / 0.2 / 0.2** |
+  | SpoofCeleb eval, Opus 16k | 68.4 / **60.4** / 19.0 | **99.6 / 0.3 / 0.4** |
+  | ASVspoof 2019 1,000, original / Opus 16k | **99.0 / 99.1** (EER 1.2 / 1.0) | 98.5 / 98.4 (EER 1.8 / 1.6) |
+- **Impact of the new data:** (1) EXP-010 hid a large weakness: it flagged **46–60% of SpoofCeleb's real interview-style voices as AI** while still catching its fakes; the new data removes it (0.2–0.3%). (2) Gains carry over to sets neither model trained on: In-the-Wild EER 5.0 → 3.8%, false alarms at Opus 16k 10.0 → 7.3%; unseen-TTS EER halved (1.3 → 0.7%). (3) Compression costs less (In-the-Wild: −1.0 pt at Opus 16k vs −1.7). (4) Only loss: ~0.5 pt on the 2019 studio benchmark.
+- **Caveats:** SpoofCeleb evaluation shares the recording style of the new training data (speakers and attack systems differ), so In-the-Wild and MLAAD are the cleanest comparisons; no McNemar test was run here. EXP-010 numbers differ slightly from its own log (94.8 vs 94.6%) because this script windows files slightly differently; both models were scored identically.
+- **Live test (user, app):** 2 real voices (own voice, film audio) + 1 AI clone, all correct; layer occlusion shows the top WavLM layers now vote **AI** on the clone (they voted "human" for every clone under EXP-008b).
+- **Decision:** both models kept and selectable in the app; **VoxTrace-Wild is the default**, VoxTrace-Base the alternative. Diagnostic images are no longer saved to disk.
+- **Graphs:** `mapped_results/EXP-011_spoofceleb_finetune/`.
