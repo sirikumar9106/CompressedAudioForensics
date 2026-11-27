@@ -1,4 +1,4 @@
-"""CompressedAudioForensics — local web app (single page + JSON API).
+"""VoxTrace — local web app (React front end in frontend/, built into static/, plus a JSON API).
 
 Run:  python -m uvicorn src.app.server:app --host 127.0.0.1 --port 7860
 Uploaded audio is decoded in memory/temp, analysed, and deleted immediately.
@@ -44,7 +44,8 @@ PLATFORMS = {
     "unknown":   ("I don't know",        "unknown", "General model, no bitrate assumption"),
 }
 
-app = FastAPI(title="CompressedAudioForensics")
+app = FastAPI(title="VoxTrace")
+STATIC = Path(__file__).parent / "static"          # built React app, one self-contained file (source in frontend/)
 STATE = {}
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 # Selectable detectors (VoxTrace family: WavLM-Base+ fine-tuned, main branch + low-layer texture branch)
@@ -294,4 +295,4 @@ def platforms():
 
 @app.get("/")
 def index():
-    return FileResponse(Path(__file__).parent / "static" / "index.html")
+    return FileResponse(STATIC / "index.html")
