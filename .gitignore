@@ -43,3 +43,6 @@ data/real_world/*
 
 # --- Private research report (published separately, never pushed) ---
 report/
+
+# front-end build tooling (built output lives in src/app/static)
+frontend/node_modules/
