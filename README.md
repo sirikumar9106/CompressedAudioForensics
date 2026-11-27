@@ -112,10 +112,10 @@ pip install -r requirements.txt
 ```
 | Step | Command |
 |---|---|
-| Download datasets | `download_datasets.bat`, `download_mlaad.bat`, SpoofCeleb via `overnight_spoofceleb_train.bat` (needs `HF_TOKEN`; MLAAD and SpoofCeleb terms accepted) |
-| Train + test the models | `run_exp010.bat` (VoxTrace-Base), `overnight_spoofceleb_train.bat` (SpoofCeleb download + VoxTrace-Wild) |
+| Download datasets | `tools/download_datasets.bat`, `tools/download_mlaad.bat`; SpoofCeleb is fetched by `train_voxtrace_wild.bat` (needs `HF_TOKEN`; MLAAD and SpoofCeleb terms accepted) |
+| Train + test the models | `train_voxtrace_base.bat` (VoxTrace-Base), `train_voxtrace_wild.bat` (SpoofCeleb download + VoxTrace-Wild) |
 | Web app | `run_app.bat` → http://127.0.0.1:7860 |
-| Earlier experiments | `run_exp006.bat` … `run_exp011.bat`, or `python experiments/<script>.py` |
+| Earlier experiments | launchers in `archived_experiments/`, or `python experiments/<script>.py` |
 
 Datasets are **not** included; links and paths are listed in `requirements.txt`. Trained models: see *Download the models* above.
 
@@ -126,6 +126,8 @@ src/app/        web app: server, diagnostics, single-page UI
 src/data/       audio loading, FFmpeg codec simulation, manifests
 src/evaluation/ EER / AUC / bootstrap CI, Platt calibration
 experiments/    one script per experiment
+archived_experiments/  launchers for earlier experiments (EXP-006 … EXP-011 test runs)
+tools/          setup, dataset download and cleanup scripts
 mapped_results/ graphs per experiment (EXP-001 … EXP-011)
 ```
 

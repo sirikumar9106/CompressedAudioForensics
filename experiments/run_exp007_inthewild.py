@@ -26,7 +26,7 @@ PROFILES = ["clean", "unknown"]
 def main():
     metas = list((ROOT / "data/raw/in_the_wild").rglob("meta.csv"))
     if not metas:
-        sys.exit("In-the-Wild meta.csv not found - run download_datasets.bat first")
+        sys.exit("In-the-Wild meta.csv not found - run tools/download_datasets.bat first")
     meta = metas[0]
     rows = list(csv.DictReader(open(meta, encoding="utf-8")))
     lab = lambda r: 1 if r["label"].strip().lower().startswith("bona") else 0

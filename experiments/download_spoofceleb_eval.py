@@ -49,7 +49,7 @@ class Chain:
                 return
             except Exception as e:
                 log(f"  network problem on {PARTS[self.i]} at {offset / 1e9:.2f} GB: {e!r}"[:200]); time.sleep(min(60, 5 * (k + 1)))
-        raise SystemExit(f"cannot reach {PARTS[self.i]} - re-run the .bat to start over (extracted files are kept)")
+        raise SystemExit(f"cannot reach {PARTS[self.i]} - re-run train_voxtrace_wild.bat to start over (extracted files are kept)")
 
     def _next(self):
         self.i += 1

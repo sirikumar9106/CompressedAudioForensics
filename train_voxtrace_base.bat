@@ -1,5 +1,5 @@
 @echo off
-title EXP-010: modern TTS (MLAAD) + 8 layers + texture branch
+title VoxTrace-Base: train + test (EXP-010)
 cd /d "%~dp0"
 set PYTHONIOENCODING=utf-8
 ".venv\Scripts\python.exe" -u experiments\exp008_data.py exp010

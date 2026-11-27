@@ -1,8 +1,9 @@
 # One-shot environment setup for Windows + NVIDIA RTX 50-series (Blackwell, sm_120 -> needs CUDA >= 12.8 wheels).
 # Creates .venv in this folder; does NOT touch your global Python packages. Log: setup_log.txt
 $ErrorActionPreference = "Continue"
-Set-Location -LiteralPath $PSScriptRoot
-$log = Join-Path $PSScriptRoot "setup_log.txt"
+$Root = Split-Path -Parent $PSScriptRoot   # project folder (this script lives in tools/)
+Set-Location -LiteralPath $Root
+$log = Join-Path $Root "setup_log.txt"
 Start-Transcript -Path $log -Force | Out-Null
 function Refresh-Path { $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User") }
 
@@ -23,7 +24,7 @@ if (-not $py) {
 
 # 2. Virtual environment
 if (-not (Test-Path ".venv\Scripts\python.exe")) { & $py[0] $py[1..9] -m venv .venv }
-$vp = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
+$vp = Join-Path $Root ".venv\Scripts\python.exe"
 & $vp -m pip install --upgrade pip setuptools wheel
 
 # 3. PyTorch with CUDA >= 12.8 (required for RTX 5050). Try newest CUDA index first.

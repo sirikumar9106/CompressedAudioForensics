@@ -39,12 +39,13 @@ gdown>=5.0               # Google Drive downloads (LibriSeVoc)
 #      https://zenodo.org/records/4835108
 #      keys/labels: https://www.asvspoof.org/index2021.html
 #      locked 1,000-file subset listed in: data/manifests/evaluation_manifest.csv
-#   3. Real-world sets used by EXP-007 .. EXP-010 (download_datasets.bat / download_mlaad.bat fetch them):
+#   3. Real-world sets used by EXP-007 .. EXP-010 (tools/download_datasets.bat / tools/download_mlaad.bat fetch them):
 #      ASVspoof 5 (train part aa)  https://zenodo.org/records/14498691            -> data/raw/asvspoof5/
 #      Fake-or-Real                https://bil.eecs.yorku.ca/datasets/            -> data/raw/fake_or_real/
 #      LibriSeVoc                  https://github.com/csun22/Synthetic-Voice-Detection-Vocoder-Artifacts -> data/raw/librisevoc/
 #      In-the-Wild (test only)     https://deepfake-total.com/in_the_wild         -> data/raw/in_the_wild/
 #      MLAAD v9 English (gated, CC BY-NC 4.0) https://huggingface.co/datasets/mueller91/MLAAD -> data/raw/mlaad/
+#      SpoofCeleb (gated, CC BY 4.0) https://huggingface.co/datasets/jungjee/spoofceleb -> data/raw/spoofceleb/ (train_voxtrace_wild.bat)
 #
 # Pretrained weights:
 #   Official ASVspoof 2021 DF RawNet2 baseline

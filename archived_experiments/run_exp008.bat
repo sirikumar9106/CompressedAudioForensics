@@ -1,6 +1,6 @@
 @echo off
 title EXP-008 merge datasets + fine-tune WavLM (live)
-cd /d "%~dp0"
+cd /d "%~dp0.."
 set PYTHONIOENCODING=utf-8
 echo === Step 1: merge + balance datasets, pre-encode codec copies ===
 ".venv\Scripts\python.exe" -u experiments\exp008_data.py

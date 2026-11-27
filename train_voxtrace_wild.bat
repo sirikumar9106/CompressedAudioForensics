@@ -1,5 +1,5 @@
 @echo off
-title OVERNIGHT: SpoofCeleb full download, then train EXP-010-SC, then test
+title VoxTrace-Wild: SpoofCeleb download, then train + test (EXP-011)
 cd /d "%~dp0"
 set PYTHONIOENCODING=utf-8
 for /L %%i in (1,1,3) do (
