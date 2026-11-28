@@ -278,6 +278,42 @@ function Reference({ R }) {
   );
 }
 
+/* ---------- window replay: threads branch from the file to every 4-second window ---------- */
+function Replay({ r }) {
+  const setTip = useContext(TipCtx);
+  const ws = r.windows.slice(0, 24), RW = 1100, row = 34, top = 14, rx = 70;
+  const per = ws.length > 12 ? Math.ceil(ws.length / 2) : ws.length;           // one column, or two when long
+  const H2 = top * 2 + per * row, cx0 = ws.length > 12 ? 300 : 420, cw = ws.length > 12 ? 330 : 560;
+  const pos = (i) => ({ x: cx0 + Math.floor(i / per) * 380, y: top + (i % per) * row });
+  return (
+    <svg viewBox={`0 0 ${RW} ${H2}`} className="plot replay" onPointerLeave={() => setTip(null)}>
+      <circle cx={rx} cy={H2 / 2} r="16" className="root" />
+      <text x={rx} y={H2 / 2 + 34} textAnchor="middle" className="ax">this file</text>
+      {ws.map((w, i) => {
+        const { x, y } = pos(i), yc = y + row / 2 - 3, human = w.p_real >= 0.5, c = !w.speech ? "#b9ad92" : human ? HUMAN : AI;
+        const d = `M${rx + 16} ${H2 / 2} C ${rx + 140} ${H2 / 2}, ${x - 150} ${yc}, ${x} ${yc}`;
+        const tip = { title: `${w.t0}–${w.t1} s: ${pct(w.p_real)} human`, color: c, lines: [
+          !w.speech ? "Mostly silence: replayed for completeness but left out of the final score."
+            : human ? "This window sounded like a real person." : "This window sounded like a cloned or synthetic voice.",
+          i > 0 ? `Compared with the window before: ${fmt((w.p_real - ws[i - 1].p_real) * 100, 0)} points.` : "The first window of the recording.",
+          "The final verdict is the middle value of all speech windows, so one odd window cannot flip it alone."] };
+        return (
+          <g key={i} onPointerMove={(e) => setTip({ ...tip, x: e.clientX, y: e.clientY })}>
+            <motion.path d={d} fill="none" stroke={c} strokeWidth="1.6" opacity=".7" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
+              transition={{ duration: 0.9, delay: 0.3 + i * 0.12, ease: [0.3, 0.7, 0.2, 1] }} />
+            <motion.g initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ type: "spring", stiffness: 90, damping: 15, delay: 0.9 + i * 0.12 }}>
+              <rect x={x} y={y + 2} width={cw} height={row - 10} rx="8" fill="#fffaf0" stroke={c} strokeWidth="1.4" />
+              <rect x={x} y={y + 2} width={cw * w.p_real} height={row - 10} rx="8" fill={c} opacity=".12" />
+              <text x={x + 12} y={yc + 4} className="rt">{w.t0}–{w.t1} s</text>
+              <text x={x + cw - 12} y={yc + 4} textAnchor="end" className="rt" style={{ fill: c }}>{w.speech ? `${pct(w.p_real)} human` : "quiet"}</text>
+            </motion.g>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 /* ---------- acoustic measurements ---------- */
 const ACOUSTIC = [
   ["pause_ratio", "Pauses", (v) => pct(v), "Share of the file that is silence. Cloned voices often have unnaturally even, short pauses."],
@@ -315,6 +351,7 @@ function Card({ title, note, children, i, wide }) {
 export default function Details({ r }) {
   const d = r.diagnostics, n = d?.layer_drop?.length || 0;
   const cards = [
+    ["Window replay", "The file branches into its 4-second windows, replayed in order. Hover a window for what it means.", <Replay r={r} />, true],
     ["Confidence over time", "Each point is a 4-second window. Hover a point to see what it means.", <Timeline r={r} />],
     d && ["Spectrogram", "What the recording contains, pitch by moment, with the model's opinion of each window on top.", <Spectrogram d={d} />],
     d && ["Which frequencies, when", "Each cell: how much one 1 kHz band at one moment pushed the verdict. Blue is evidence for human, red for AI.", <BandMap d={d} />],
@@ -340,7 +377,7 @@ export default function Details({ r }) {
         <div><h2>How VoxTrace reached this verdict</h2><p className="muted">{r.verdict} with {r.model}. {r.notes?.[0] || ""}</p></div>
       </div>
       <div className="charts">
-        {cards.map(([t, nt, c], i) => <Card key={t} title={t} note={nt} i={i}>{c}</Card>)}
+        {cards.map(([t, nt, c, wide], i) => <Card key={t} title={t} note={nt} i={i} wide={wide}>{c}</Card>)}
       </div>
       {!d && <p className="muted center">Detailed diagnostics are available for the VoxTrace models only.</p>}
     </section>
