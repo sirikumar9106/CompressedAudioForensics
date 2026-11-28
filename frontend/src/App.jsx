@@ -179,7 +179,7 @@ function Home({ onCheck, show, form, setForm }) {
   };
 
   return (
-    <Tilt className="card glass pop" initial={{ y: 40, opacity: 0 }} animate={show ? { y: 0, opacity: 1 } : {}} transition={{ ...flow, delay: 0.2 }}>
+    <Tilt className={"card glass pop" + (file ? " ready" : "")} initial={{ y: 40, opacity: 0 }} animate={show ? { y: 0, opacity: 1 } : {}} transition={{ ...flow, delay: 0.2 }}>
       <p className="lede">Find out whether a voice note is a real person or an AI voice clone.</p>
 
       <div className={"drop" + (over ? " over" : "") + (file ? " has" : "")} tabIndex={0} role="button"
@@ -218,7 +218,7 @@ function Home({ onCheck, show, form, setForm }) {
       </div>
 
       <label className="lbl">Where did you receive it?</label>
-      <div className="select" onClick={(e) => e.stopPropagation()}>
+      <div className={"select" + (open ? " open" : "")} onClick={(e) => e.stopPropagation()}>
         <button type="button" className="sel glass-btn" onClick={() => setOpen(!open)} aria-expanded={open}>
           <Chip s={src} /><span>{src[1]}</span>
           <motion.svg animate={{ rotate: open ? 180 : 0 }} transition={flow} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></motion.svg>
