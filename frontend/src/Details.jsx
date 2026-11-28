@@ -24,6 +24,7 @@ export function TipLayer({ children }) {
 const W = 560, H = 250;
 const fmt = (v, d = 1) => (v > 0 ? "+" : "") + v.toFixed(d);
 const pct = (v) => Math.round(v * 100) + "%";
+const secs = (T) => (v) => v.toFixed(T < 8 ? 1 : 0) + " s";   // short files need a decimal or ticks repeat
 const lean = (s) => (s >= 0 ? "human-leaning" : "AI-leaning");
 
 /** Shared plot frame: scales, grid, axes, pointer → nearest item → tooltip + highlight. */
@@ -72,7 +73,7 @@ const div = (v, m) => { // diverging fill: blue = evidence for human, red = evid
 function Timeline({ r }) {
   const ws = r.windows, T = Math.max(...ws.map((w) => w.t1)), mid = (w) => (w.t0 + w.t1) / 2, c = "#1f8a80";
   return (
-    <Plot x={[0, T]} y={[0, 1]} xTicks={ticks(0, T)} yTicks={[0, 0.25, 0.5, 0.75, 1]} xFmt={(v) => v.toFixed(0) + " s"} yFmt={pct}
+    <Plot x={[0, T]} y={[0, 1]} xTicks={ticks(0, T)} yTicks={[0, 0.25, 0.5, 0.75, 1]} xFmt={secs(T)} yFmt={pct}
       xLabel="time in the recording" yLabel="chance of a human voice" color={c}
       pick={(v, { X, Y }) => {
         const i = nearest(ws.map(mid), v.x), w = ws[i], prev = ws[i - 1], d = prev ? Math.round((w.p_real - prev.p_real) * 100) : null;
@@ -88,13 +89,14 @@ function Timeline({ r }) {
       }}>
       {({ X, Y, P }) => {
         const pts = ws.map((w) => [X(mid(w)), Y(w.p_real)]);
+        const L = pts.length > 1 ? pts : [[X(0), pts[0][1]], [X(T), pts[0][1]]];   // a single window spans the whole file
         return (
           <>
             {ws.filter((w) => !w.speech).map((w) => <rect key={w.t0} x={X(w.t0)} y={P.t} width={X(w.t1) - X(w.t0)} height={H - P.t - P.b} fill="#e9dcc0" opacity=".5" />)}
             {r.suspicious_span && <rect x={X(r.suspicious_span[0])} y={P.t} width={X(r.suspicious_span[1]) - X(r.suspicious_span[0])} height={H - P.t - P.b} fill="none" stroke={AI} strokeDasharray="4 4" rx="4" />}
             <line x1={P.l} x2={W - P.r} y1={Y(0.5)} y2={Y(0.5)} className="mid" />
-            <path d={line(pts) + `L${pts.at(-1)[0]},${Y(0)}L${pts[0][0]},${Y(0)}Z`} fill={c} opacity=".1" />
-            <motion.path d={line(pts)} fill="none" stroke={c} strokeWidth="2.4" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.4 }} />
+            <path d={line(L) + `L${L.at(-1)[0]},${Y(0)}L${L[0][0]},${Y(0)}Z`} fill={c} opacity=".1" />
+            <motion.path d={line(L)} fill="none" stroke={c} strokeWidth="2.4" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.4 }} />
             {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="4.2" fill="#fffaf0" stroke={c} strokeWidth="2" />)}
           </>
         );
@@ -119,7 +121,7 @@ function Spectrogram({ d }) {
   }, [v, rows, cols]);
   const sMax = Math.max(1, ...d.scores.map(Math.abs));
   return (
-    <Plot x={[0, dur]} y={[0, 8000]} pad={{ t: 34 }} xTicks={ticks(0, dur)} yTicks={[0, 2000, 4000, 6000, 8000]} xFmt={(t) => t.toFixed(0) + " s"} yFmt={(f) => f / 1000 + "k"}
+    <Plot x={[0, dur]} y={[0, 8000]} pad={{ t: 34 }} xTicks={ticks(0, dur)} yTicks={[0, 2000, 4000, 6000, 8000]} xFmt={secs(dur)} yFmt={(f) => f / 1000 + "k"}
       xLabel="time" yLabel="pitch (Hz)" color="#6e263e"
       pick={(p, { X, Y, P }) => {
         if (p.py < P.t - 2) {
@@ -203,7 +205,7 @@ function Bars({ vals, labels, xLabel, explain }) {
 function Attention({ d }) {
   const { t, att, env } = d.attention, T = t.at(-1) || 1, c = "#c07c12";
   return (
-    <Plot x={[0, T]} y={[0, 1]} xTicks={ticks(0, T)} yTicks={[0, 0.5, 1]} xFmt={(v) => v.toFixed(0) + " s"} yFmt={pct} xLabel="time" yLabel="relative level" color={c}
+    <Plot x={[0, T]} y={[0, 1]} xTicks={ticks(0, T)} yTicks={[0, 0.5, 1]} xFmt={secs(T)} yFmt={pct} xLabel="time" yLabel="relative level" color={c}
       pick={(p, { X, Y }) => {
         const i = nearest(t, p.x), a = att[i], l = env[i], prev = att[Math.max(0, i - 3)];
         return { mark: { dot: [X(t[i]), Y(a)], vline: X(t[i]) },
