@@ -198,6 +198,13 @@ button { font: inherit; color: inherit; }
 .num span { font-size: 14px; color: var(--muted); margin-top: 6px; }
 .verdict { font-family: var(--display); font-weight: 560; font-size: 30px; margin: 26px 0 8px; letter-spacing: -.01em; }
 .result.real .verdict { color: #6b4a12; } .result.fake .verdict { color: #a2361f; } .result.warn .verdict { color: #8a5a10; }
+.scale { width: min(460px, 100%); margin-top: 22px; }
+.scale-track { position: relative; height: 8px; border-radius: 9px; box-shadow: inset 0 1px 2px rgba(80, 55, 15, .25);
+  background: linear-gradient(90deg, #e9c47a, #f4e6c6 50%, #dc8a62 75%, #a2361f); }
+.scale-track i { position: absolute; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #f1dfb8 60%, #c9a35c); border: 1px solid #fff;
+  box-shadow: 0 0 0 3px rgba(226, 186, 104, .25), 0 4px 10px rgba(80, 55, 15, .35); }
+.scale-ends { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
 .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; width: 100%; margin-top: 26px; }
 .facts span { padding: 12px; border-radius: 16px; font-weight: 700; font-size: 14px; background: rgba(255, 252, 244, .8); border: 1px solid #fff;
   box-shadow: 0 1px 0 #efe3c8, 0 2px 0 #e4d3ad, 0 3px 1px #d9c597, 0 12px 20px -10px rgba(110, 76, 24, .35); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
