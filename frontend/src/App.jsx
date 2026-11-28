@@ -123,6 +123,17 @@ export default function App() {
   );
 }
 
+/* ---------------- a streak of light that shoots out of a pressed button ---------------- */
+export function comet(e) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const r = e.currentTarget.getBoundingClientRect(), c = document.createElement("i");
+  c.className = "comet"; c.style.left = e.clientX - 150 + "px"; c.style.top = r.top + r.height / 2 + "px";
+  document.body.appendChild(c);
+  c.animate([{ transform: "translateX(0) scaleX(.2)", opacity: 0 }, { opacity: 1, offset: 0.12 },
+    { transform: `translateX(${innerWidth - e.clientX + 200}px) scaleX(1)`, opacity: 0 }],
+    { duration: 1100, easing: "cubic-bezier(.25,.7,.3,1)" }).onfinish = () => c.remove();
+}
+
 /* ---------------- a card that lifts off the page and leans towards the pointer ---------------- */
 export function Tilt({ children, max = 3, style, ...rest }) {
   const spring = { stiffness: 120, damping: 18 };
@@ -230,7 +241,7 @@ function Home({ onCheck, show, form, setForm }) {
         </AnimatePresence>
       </div>
 
-      <button className="cta" disabled={!file} onClick={submit}
+      <button className="cta" disabled={!file} onClick={submit} onPointerDown={comet}
         onPointerMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`); }}>
         Check authenticity
       </button>
@@ -327,7 +338,7 @@ function Result({ r, onNew }) {
       </div>
       {r.level !== "real" && <ul className="advice">{r.advice.slice(0, 3).map((a) => <li key={a}>{a}</li>)}</ul>}
       <div className="actions">
-        <button className="cta" onClick={() => go("details")}>Check the details</button>
+        <button className="cta" onPointerDown={comet} onClick={() => go("details")}>Check the details</button>
         <button className="glass-btn ghost" onClick={onNew}>Check another file</button>
       </div>
     </section>

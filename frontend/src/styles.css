@@ -80,6 +80,9 @@ button { font: inherit; color: inherit; }
 .cta:hover:not(:disabled) { transform: translateY(-3px) scale(1.01); }
 .cta:active:not(:disabled) { transform: scale(.975); }
 .cta:disabled { filter: saturate(.35); opacity: .65; cursor: not-allowed; }
+.comet { position: fixed; z-index: 70; width: 170px; height: 4px; margin-top: -2px; border-radius: 4px; pointer-events: none; transform-origin: right center;
+  background: linear-gradient(90deg, rgba(176, 124, 40, 0), rgba(186, 134, 50, .85) 72%, #fff3d2 94%, #fff);
+  box-shadow: 0 0 12px 2px rgba(196, 149, 62, .55); filter: drop-shadow(0 0 6px rgba(196, 149, 62, .8)); }
 .ghost { padding: 13px 18px; font-weight: 600; display: inline-flex; gap: 8px; align-items: center; }
 .round { padding: 10px 16px 10px 13px; border-radius: 999px; display: inline-flex; gap: 7px; align-items: center; font-weight: 600; font-size: 13.5px; }
 .nav { position: absolute; z-index: 20; top: 22px; right: 28px; display: flex; gap: 10px; }
