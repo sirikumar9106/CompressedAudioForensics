@@ -283,9 +283,10 @@ function Reference({ R }) {
 /* ---------- window replay: threads branch from the file to every 4-second window ---------- */
 function Replay({ r }) {
   const setTip = useContext(TipCtx);
-  const ws = r.windows.slice(0, 24), RW = 1100, row = 34, top = 14, rx = 70;
-  const per = ws.length > 12 ? Math.ceil(ws.length / 2) : ws.length;           // one column, or two when long
-  const H2 = top * 2 + per * row, cx0 = ws.length > 12 ? 300 : 420, cw = ws.length > 12 ? 330 : 560;
+  const narrow = innerWidth < 700;                                               // phones: one narrower column, so text stays readable
+  const ws = r.windows.slice(0, 24), RW = narrow ? 560 : 1100, row = 34, top = 14, rx = narrow ? 40 : 70;
+  const per = ws.length > 12 && !narrow ? Math.ceil(ws.length / 2) : ws.length;  // one column, or two when long
+  const H2 = top * 2 + per * row, cx0 = narrow ? 180 : ws.length > 12 ? 300 : 420, cw = narrow ? 370 : ws.length > 12 ? 330 : 560;
   const pos = (i) => ({ x: cx0 + Math.floor(i / per) * 380, y: top + (i % per) * row });
   return (
     <svg viewBox={`0 0 ${RW} ${H2}`} className="plot replay" onPointerLeave={() => setTip(null)}>
@@ -293,7 +294,7 @@ function Replay({ r }) {
       <text x={rx} y={H2 / 2 + 34} textAnchor="middle" className="ax">this file</text>
       {ws.map((w, i) => {
         const { x, y } = pos(i), yc = y + row / 2 - 3, human = w.p_real >= 0.5, c = !w.speech ? "#b9ad92" : human ? HUMAN : AI;
-        const d = `M${rx + 16} ${H2 / 2} C ${rx + 140} ${H2 / 2}, ${x - 150} ${yc}, ${x} ${yc}`;
+        const d = `M${rx + 16} ${H2 / 2} C ${rx + (narrow ? 70 : 140)} ${H2 / 2}, ${x - (narrow ? 70 : 150)} ${yc}, ${x} ${yc}`;
         const tip = { title: `${w.t0}–${w.t1} s: ${pct(w.p_real)} human`, color: c, lines: [
           !w.speech ? "Mostly silence: replayed for completeness but left out of the final score."
             : human ? "This window sounded like a real person." : "This window sounded like a cloned or synthetic voice.",
