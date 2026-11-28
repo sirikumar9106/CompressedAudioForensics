@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Logo, { IntroMark } from "./Logo.jsx";
 import Waves from "./Waves.jsx";
 import Details, { TipLayer } from "./Details.jsx";
+import Busy from "./Process.jsx";
 
 export const flow = { type: "spring", stiffness: 90, damping: 19, mass: 1.1 };   // water-like settle
 const ORDER = { home: 0, result: 1, details: 2 };
@@ -28,6 +29,7 @@ const SOURCES = [
   ["wechat", "WeChat", "WC", "#07C160"], ["discord", "Discord", "DC", "#5865F2"], ["snapchat", "Snapchat", "SC", "#F2D600"],
   ["reddit", "Reddit", "RD", "#FF4500"], ["gmail", "E-mail attachment", ICON.mail, "#a88550"], ["phone", "Phone call or voicemail", ICON.phone, "#34C759"],
   ["other", "Other messenger", "··", "#8a7550"]];
+const modelName = (id) => id.split("-").map((w, i) => (i ? w[0].toUpperCase() + w.slice(1) : "VoxTrace")).join("-");
 const Chip = ({ s }) => s[0] === "unknown"
   ? <span className="chip q">?</span>
   : <span className="chip" style={{ background: s[3] }}>{s[2]}</span>;
@@ -118,7 +120,7 @@ export default function App() {
         </AnimatePresence>
       </div>
 
-      <AnimatePresence>{busy && <Busy key="busy" />}</AnimatePresence>
+      <AnimatePresence>{busy && <Busy key="busy" model={modelName(form.model)} source={form.src[0] === "unknown" ? "the file's own compression" : form.src[1]} />}</AnimatePresence>
     </TipLayer>
   );
 }
@@ -268,29 +270,6 @@ function Player({ file }) {
       </button>
       <div className="track" onClick={seek}><motion.i animate={{ width: dur ? `${(t / dur) * 100}%` : 0 }} transition={{ duration: 0.25, ease: "linear" }} /></div>
       <span className="time">{clock(t)} / {dur ? clock(dur) : "–:––"}</span>
-    </motion.div>
-  );
-}
-
-/* ---------------- authenticating overlay ---------------- */
-const STEPS = ["Decoding the audio", "Listening in 4-second windows", "Comparing against real and cloned voices", "Weighing the evidence"];
-function Busy() {
-  const [n, setN] = useState(1);
-  useEffect(() => { const t = setInterval(() => setN((k) => (k % 4) + 1), 380); return () => clearInterval(t); }, []);
-  const [step, setStep] = useState(0);
-  useEffect(() => { const t = setInterval(() => setStep((k) => Math.min(k + 1, STEPS.length - 1)), 1500); return () => clearInterval(t); }, []);
-  return (
-    <motion.div className="busy" role="status" aria-live="polite"
-      initial={{ backdropFilter: "blur(0px)", backgroundColor: "rgba(250,244,231,0)" }}
-      animate={{ backdropFilter: "blur(14px)", backgroundColor: "rgba(250,244,231,.55)" }}
-      exit={{ backdropFilter: "blur(0px)", backgroundColor: "rgba(250,244,231,0)" }} transition={{ duration: 0.7 }}>
-      <motion.div className="busy-in" initial={{ scale: 0.7, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }} transition={flow}>
-        <Logo size={128} mode="busy" />
-        <h2>Authenticating<span className="dots">{".".repeat(n)}</span></h2>
-        <AnimatePresence mode="wait">
-          <motion.p key={step} initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} transition={{ duration: 0.35 }}>{STEPS[step]}</motion.p>
-        </AnimatePresence>
-      </motion.div>
     </motion.div>
   );
 }
