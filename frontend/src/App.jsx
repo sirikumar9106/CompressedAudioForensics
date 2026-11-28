@@ -173,8 +173,9 @@ function Home({ onCheck, show, form, setForm }) {
     fetch("/api/models").then((r) => r.json()).then((l) => { setModels(l); if (l.length && !l.some((m) => m.id === model)) setModel(l[0].id); }).catch(() => {});
     fetch("/api/platforms").then((r) => r.json()).then((l) => { setNotes(Object.fromEntries(l.map((p) => [p.id, p.note]))); setReady(true); }).catch(() => setReady(false));
     const close = () => setOpen(false);
-    addEventListener("click", close);
-    return () => removeEventListener("click", close);
+    const esc = (e) => e.key === "Escape" && setOpen(false);
+    addEventListener("click", close); addEventListener("keydown", esc);
+    return () => { removeEventListener("click", close); removeEventListener("keydown", esc); };
   }, []);
 
   const pick = (f) => { if (f) { setFile(f); setErr(""); } };
