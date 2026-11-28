@@ -70,7 +70,9 @@ export default function Busy({ model, source, done }) {
       exit={{ backdropFilter: "blur(0px)", backgroundColor: "rgba(250,244,231,0)" }} transition={{ duration: 0.7 }}>
       <Constellation done={done} />
       <motion.div className="busy-in" initial={{ scale: 0.7, y: 20, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }} transition={flow}>
-        <Logo size={128} mode="busy" />
+        <motion.div animate={done ? { scale: [1, 1.12, 1], filter: ["drop-shadow(0 0 0px rgba(226,186,104,0))", "drop-shadow(0 0 26px rgba(226,186,104,.9))", "drop-shadow(0 0 8px rgba(226,186,104,.4))"] } : {}} transition={{ duration: 1.1 }}>
+          <Logo size={128} mode={done ? "static" : "busy"} />
+        </motion.div>
         <h2>{done ? "Done" : "Authenticating"}<span className="dots">{done ? "" : ".".repeat(n)}</span></h2>
         <motion.div className="steps glass pop" initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ ...flow, delay: 0.25 }}>
           <ol>

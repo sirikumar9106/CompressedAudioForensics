@@ -39,6 +39,7 @@ export default function App() {
   const [dir, setDir] = useState(1);
   const [intro, setIntro] = useState(!matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [busy, setBusy] = useState(false);
+  const [finish, setFinish] = useState(false);
   const [res, setRes] = useState(null);
   const [form, setForm] = useState({ file: null, model: "voxtrace-wild", src: SOURCES[0] });   // kept when going Back
   const newCheck = () => { setForm((f) => ({ ...f, file: null })); go("home"); };              // New check clears the audio
@@ -64,11 +65,13 @@ export default function App() {
       const [r] = await Promise.all([fetch("/api/analyze", { method: "POST", body: form }), new Promise((ok) => setTimeout(ok, 2400))]);
       const j = await r.json();
       if (!r.ok) throw new Error(j.detail || "VoxTrace could not read this file. Try another audio format.");
+      setFinish(true);                                                  // fill the steps and gather the constellation
+      await new Promise((ok) => setTimeout(ok, 1200));
       setRes(j); resRef.current = j; go("result");
       return null;
     } catch (e) {
       return e.message === "Failed to fetch" ? "The detector is not running. Start run_app.bat and try again." : e.message;
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setFinish(false); }
   };
 
   return (
@@ -120,7 +123,7 @@ export default function App() {
         </AnimatePresence>
       </div>
 
-      <AnimatePresence>{busy && <Busy key="busy" model={modelName(form.model)} source={form.src[0] === "unknown" ? "the file's own compression" : form.src[1]} />}</AnimatePresence>
+      <AnimatePresence>{busy && <Busy key="busy" done={finish} model={modelName(form.model)} source={form.src[0] === "unknown" ? "the file's own compression" : form.src[1]} />}</AnimatePresence>
     </TipLayer>
   );
 }
