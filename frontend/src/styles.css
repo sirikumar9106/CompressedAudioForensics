@@ -56,8 +56,14 @@ button { font: inherit; color: inherit; }
   content: ""; position: absolute; left: 18%; right: 18%; bottom: -30%; height: 60%; border-radius: 50%; pointer-events: none; z-index: -1;
   background: radial-gradient(closest-side, rgba(255, 238, 196, .75), rgba(255, 238, 196, 0)); filter: blur(4px);
 }
-.glass-btn { cursor: pointer; border-radius: 16px; transition: transform .7s cubic-bezier(.2, .9, .25, 1.15), box-shadow .5s; }
+.glass-btn { cursor: pointer; border-radius: 16px; transition: transform .7s cubic-bezier(.2, .9, .25, 1.15), box-shadow .5s, border-color .5s; }
 .glass-btn:hover { transform: translateY(-2px) scale(1.015); }
+/* soft gold halo that wakes up on hover and keyboard focus */
+.glass-btn:hover, .glass-btn:focus-visible, .cta:hover:not(:disabled), .cta:focus-visible {
+  border-color: rgba(236, 198, 120, .95); outline: none;
+  box-shadow: inset 0 1.5px 1px #fff, inset 0 12px 16px -12px rgba(255, 255, 255, .9), inset 0 -14px 18px -14px rgba(176, 132, 58, .45),
+    0 0 0 3px rgba(226, 186, 104, .18), 0 0 22px 2px rgba(226, 186, 104, .35), 0 14px 26px -12px rgba(110, 76, 24, .45);
+}
 .glass-btn:active { transform: scale(.97); }
 .glass-in { overflow: visible; }
 
